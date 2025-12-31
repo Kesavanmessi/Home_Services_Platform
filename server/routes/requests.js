@@ -140,8 +140,17 @@ router.put('/:id/accept', auth, async (req, res) => {
         if (!request) return res.status(404).json({ message: 'Request not found' });
         if (request.status !== 'open' && request.status !== 'pending') return res.status(400).json({ message: 'Request already accepted or not open' });
 
-        // Simulate Fee
-        const feeAmount = 30;
+        // Check for Trial Jobs
+        let description = 'Service Request Accepted';
+        let amount = 30;
+        let isTrial = false;
+
+        if (provider.trialJobsLeft > 0) {
+            isTrial = true;
+            provider.trialJobsLeft -= 1;
+            description = `Trial Job Used (${provider.trialJobsLeft} remaining)`;
+        }
+        // Else: Check Wallet Balance logic here if implemented
 
         // Update Request
         request.provider = req.user.id;
@@ -159,8 +168,9 @@ router.put('/:id/accept', auth, async (req, res) => {
         await Transaction.create({
             user: req.user.id,
             userType: 'ServiceProvider',
-            amount: feeAmount,
+            amount: isTrial ? 0 : -amount,
             type: 'acceptance_fee',
+            description: description,
             requestId: request._id
         });
 

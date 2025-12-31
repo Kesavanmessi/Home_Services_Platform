@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import Login from './pages/Login';
+import AdminLogin from './pages/AdminLogin';
 import RegisterClient from './pages/RegisterClient';
 import RegisterProvider from './pages/RegisterProvider';
 import ClientHome from './pages/ClientHome';
@@ -11,15 +12,28 @@ import RequestDetails from './pages/RequestDetails';
 import AdminDashboard from './pages/AdminDashboard';
 import Transactions from './pages/Transactions';
 import PrivateRoute from './components/PrivateRoute';
+import AdminLayout from './components/layouts/AdminLayout';
 
 function App() {
   return (
     <AuthProvider>
       <Router>
         <Routes>
+          {/* Public User/Provider Routes */}
           <Route path="/" element={<Login />} />
           <Route path="/register-client" element={<RegisterClient />} />
           <Route path="/register-provider" element={<RegisterProvider />} />
+
+          {/* Admin Routes */}
+          <Route path="/admin/login" element={<AdminLogin />} />
+          <Route path="/admin" element={
+            <PrivateRoute role="admin">
+              <AdminLayout />
+            </PrivateRoute>
+          }>
+            <Route index element={<AdminDashboard />} />
+            {/* Future Admin Routes can be nested here */}
+          </Route>
 
           {/* Protected Client Routes */}
           <Route
@@ -72,8 +86,6 @@ function App() {
               </PrivateRoute>
             }
           />
-
-          <Route path="/admin" element={<AdminDashboard />} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" />} />

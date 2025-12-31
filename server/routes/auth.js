@@ -63,9 +63,19 @@ router.post('/login', async (req, res) => {
             user = await User.findOne({ email });
         } else if (role === 'provider') {
             user = await ServiceProvider.findOne({ email });
+        } else if (role === 'admin') {
+            // Simple Hardcoded Admin for MVP
+            if (email === 'admin@example.com' && password === 'admin123') {
+                const token = jwt.sign({ id: 'admin_id', role: 'admin' }, process.env.JWT_SECRET, { expiresIn: '1d' });
+                return res.json({
+                    token,
+                    user: { id: 'admin_id', name: 'Admin', email, role: 'admin' }
+                });
+            } else {
+                return res.status(400).json({ message: 'Invalid Admin Credentials' });
+            }
         } else {
-            // Fallback or Error
-            return res.status(400).json({ message: 'Role (client/provider) is required for login' });
+            return res.status(400).json({ message: 'Role (client/provider/admin) is required' });
         }
 
         if (!user) return res.status(400).json({ message: 'Invalid Credentials' });

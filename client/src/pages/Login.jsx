@@ -15,7 +15,8 @@ const Login = () => {
         e.preventDefault();
         const res = await login(email, password, role);
         if (res.success) {
-            navigate(role === 'client' ? '/client/home' : '/provider/dashboard');
+            if (role === 'client') navigate('/client/home');
+            else if (role === 'provider') navigate('/provider/dashboard');
         } else {
             setError(res.message);
         }
@@ -81,8 +82,8 @@ const Login = () => {
                     <button
                         type="submit"
                         className={`w-full py-3 rounded-xl text-white font-semibold shadow-lg transition-transform active:scale-95 ${role === 'client'
-                                ? 'bg-gradient-to-r from-indigo-600 to-blue-600 hover:shadow-indigo-500/30'
-                                : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:shadow-green-500/30'
+                            ? 'bg-gradient-to-r from-indigo-600 to-blue-600 hover:shadow-indigo-500/30'
+                            : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:shadow-green-500/30'
                             }`}
                     >
                         Login

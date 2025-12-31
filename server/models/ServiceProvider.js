@@ -8,7 +8,18 @@ const serviceProviderSchema = new mongoose.Schema({
     category: { type: String, required: true },
     location: { type: String, required: true },
     experience: { type: String },
-    isVerified: { type: Boolean, default: false },
+    isVerified: { type: Boolean, default: false }, // Keep for backward compatibility, sync with status
+    verificationStatus: {
+        type: String,
+        enum: ['pending_documents', 'pending_verification', 'documents_verified', 'documents_rejected', 'interview_scheduled', 'verified', 'failed'],
+        default: 'pending_documents'
+    },
+    documents: {
+        idProof: { type: String }, // URL or Base64
+        selfie: { type: String }   // URL or Base64
+    },
+    interviewDate: { type: Date },
+    trialJobsLeft: { type: Number, default: 0 },
     isAvailable: { type: Boolean, default: true },
     cancellationCount: { type: Number, default: 0 },
     dailyAcceptanceCount: { type: Number, default: 0 },
