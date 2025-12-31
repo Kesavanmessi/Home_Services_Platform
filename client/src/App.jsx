@@ -9,17 +9,19 @@ import CreateRequest from './pages/CreateRequest';
 import ProviderDashboard from './pages/ProviderDashboard';
 import RequestDetails from './pages/RequestDetails';
 import AdminDashboard from './pages/AdminDashboard';
+import Transactions from './pages/Transactions';
 import PrivateRoute from './components/PrivateRoute';
 
 function App() {
   return (
-    <Router>
-      <AuthProvider>
+    <AuthProvider>
+      <Router>
         <Routes>
           <Route path="/" element={<Login />} />
           <Route path="/register-client" element={<RegisterClient />} />
           <Route path="/register-provider" element={<RegisterProvider />} />
 
+          {/* Protected Client Routes */}
           <Route
             path="/client/home"
             element={
@@ -37,19 +39,36 @@ function App() {
             }
           />
           <Route
-            path="/client/request/:id"
+            path="/client/requests/:id"
             element={
               <PrivateRoute role="client">
                 <RequestDetails />
               </PrivateRoute>
             }
           />
+          <Route
+            path="/client/transactions"
+            element={
+              <PrivateRoute role="client">
+                <Transactions />
+              </PrivateRoute>
+            }
+          />
 
+          {/* Protected Provider Routes */}
           <Route
             path="/provider/dashboard"
             element={
               <PrivateRoute role="provider">
                 <ProviderDashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/provider/transactions"
+            element={
+              <PrivateRoute role="provider">
+                <Transactions />
               </PrivateRoute>
             }
           />
@@ -59,8 +78,8 @@ function App() {
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
-      </AuthProvider>
-    </Router>
+      </Router>
+    </AuthProvider>
   );
 }
 

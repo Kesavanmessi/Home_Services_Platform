@@ -15,6 +15,10 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/requests', require('./routes/requests'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/reviews', require('./routes/reviews'));
+app.use('/api/provider', require('./routes/provider'));
+app.use('/api/notifications', require('./routes/notifications'));
+app.use('/api/transactions', require('./routes/transactions'));
+
 
 
 

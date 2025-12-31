@@ -10,6 +10,7 @@ const RequestDetails = () => {
     const [loading, setLoading] = useState(false);
     const [review, setReview] = useState({ rating: 5, comment: '' });
     const [reviewSubmitted, setReviewSubmitted] = useState(false);
+    const [disclaimerAccepted, setDisclaimerAccepted] = useState(false);
 
     useEffect(() => {
         const fetchRequest = async () => {
@@ -104,13 +105,26 @@ const RequestDetails = () => {
                                     </div>
 
                                     {request.status === 'accepted' && (
-                                        <button
-                                            onClick={handleConfirm}
-                                            disabled={loading}
-                                            className="w-full bg-indigo-600 text-white py-2 rounded-lg font-medium hover:bg-indigo-700 transition-colors"
-                                        >
-                                            {loading ? 'Processing...' : 'Confirm Provider (₹20)'}
-                                        </button>
+                                        <div className="mt-4">
+                                            <div className="flex items-start gap-2 mb-3 bg-blue-50 p-3 rounded-lg border border-blue-100">
+                                                <input
+                                                    type="checkbox"
+                                                    id="disclaimer"
+                                                    className="mt-1"
+                                                    onChange={(e) => setDisclaimerAccepted(e.target.checked)}
+                                                />
+                                                <label htmlFor="disclaimer" className="text-xs text-blue-800 leading-tight">
+                                                    I understand that this platform only connects me with the provider. Service quality, safety, and payments are handled entirely offline between me and the provider.
+                                                </label>
+                                            </div>
+                                            <button
+                                                onClick={handleConfirm}
+                                                disabled={loading || !disclaimerAccepted}
+                                                className="w-full bg-indigo-600 text-white py-2 rounded-lg font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                                {loading ? 'Processing...' : 'Confirm Provider (₹20)'}
+                                            </button>
+                                        </div>
                                     )}
 
                                     {request.status === 'confirmed' && (
@@ -122,6 +136,16 @@ const RequestDetails = () => {
 
                                             {!reviewSubmitted && (
                                                 <form onSubmit={handleReviewSubmit} className="bg-gray-50 p-3 rounded-xl border mt-4">
+                                                    <p className="text-xs font-semibold mb-2">Service Completed?</p>
+                                                    <div className="flex gap-2 mb-3">
+                                                        <label className="flex items-center gap-1 text-xs text-gray-600 bg-white border px-2 py-1 rounded cursor-pointer">
+                                                            <input type="radio" name="completed" value="yes" required /> Yes
+                                                        </label>
+                                                        <label className="flex items-center gap-1 text-xs text-gray-600 bg-white border px-2 py-1 rounded cursor-pointer">
+                                                            <input type="radio" name="completed" value="no" /> No
+                                                        </label>
+                                                    </div>
+
                                                     <p className="text-xs font-semibold mb-2">Rate Service</p>
                                                     <div className="flex gap-2 mb-2">
                                                         {[1, 2, 3, 4, 5].map(star => (

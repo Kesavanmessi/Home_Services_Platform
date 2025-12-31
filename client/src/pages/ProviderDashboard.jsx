@@ -2,24 +2,47 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api';
 import { User, Zap, MapPin } from 'lucide-react';
+import NotificationPanel from '../components/NotificationPanel';
 
 const ProviderDashboard = () => {
     const { user } = useAuth();
     const [requests, setRequests] = useState([]);
+    const [filteredRequests, setFilteredRequests] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [isAvailable, setIsAvailable] = useState(user?.isAvailable ?? true);
+    const [filterCategory, setFilterCategory] = useState({ category: 'All', location: '' });
 
     const fetchRequests = async () => {
         try {
             const res = await api.get('/requests/nearby');
             setRequests(res.data);
+            setFilteredRequests(res.data);
         } catch (err) {
             console.error(err);
         }
     };
 
     useEffect(() => {
+        let res = requests;
+        if (filterCategory.location) {
+            res = res.filter(r => r.location.toLowerCase().includes(filterCategory.location.toLowerCase()));
+        }
+        setFilteredRequests(res);
+    }, [filterCategory, requests]);
+
+    useEffect(() => {
+        if (user) setIsAvailable(user.isAvailable);
         fetchRequests();
-    }, []);
+    }, [user]);
+
+    const toggleAvailability = async () => {
+        try {
+            const res = await api.put('/provider/availability');
+            setIsAvailable(res.data.isAvailable);
+        } catch (err) {
+            console.error('Failed to toggle availability', err);
+        }
+    };
 
     const handleAccept = async (id) => {
         if (!window.confirm('Accepting this request will deduct ₹30 from your wallet. Proceed?')) return;
@@ -30,7 +53,7 @@ const ProviderDashboard = () => {
             fetchRequests(); // Refresh list
         } catch (err) {
             console.error(err);
-            alert('Failed to accept request');
+            alert(err.response?.data?.message || 'Failed to accept request');
         } finally {
             setLoading(false);
         }
@@ -43,11 +66,27 @@ const ProviderDashboard = () => {
                     <div className="flex justify-between items-center mb-6">
                         <div>
                             <h1 className="text-2xl font-bold">Welcome, {user?.name.split(' ')[0]}!</h1>
-                            <p className="text-green-100 text-sm">{user?.category} • Verified {user?.isVerified ? '✓' : '(Pending)'}</p>
+                            <p className="text-green-100 text-sm mb-1">{user?.category} • Verified {user?.isVerified ? '✓' : '(Pending)'}</p>
+                            <a href="/provider/transactions" className="text-xs bg-white/20 px-2 py-1 rounded hover:bg-white/30 transition">View Wallet</a>
                         </div>
-                        <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-                            <User size={24} />
+                        <div className="flex gap-2">
+                            <NotificationPanel />
+                            <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                                <User size={24} />
+                            </div>
                         </div>
+                    </div>
+
+                    {/* Availability Toggle */}
+                    <div className="flex items-center justify-between bg-white/10 backdrop-blur-sm p-3 rounded-xl mb-4">
+                        <span className="font-medium text-sm">Status: {isAvailable ? 'Available' : 'Unavailable'}</span>
+                        <button
+                            onClick={toggleAvailability}
+                            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${isAvailable ? 'bg-white text-green-600' : 'bg-gray-400 text-gray-100'
+                                }`}
+                        >
+                            {isAvailable ? 'ON' : 'OFF'}
+                        </button>
                     </div>
 
                     {/* Stats Cards */}
@@ -65,16 +104,27 @@ const ProviderDashboard = () => {
                             <p className="text-xs text-green-100">This Month</p>
                         </div>
                     </div>
+
+                    {/* Filters */}
+                    <div className="bg-white/10 p-3 rounded-xl backdrop-blur-sm mb-4">
+                        <input
+                            type="text"
+                            placeholder="Filter by Location..."
+                            className="w-full bg-white/20 placeholder-green-100 text-white p-2 rounded-lg text-sm border-none focus:ring-1 focus:ring-white"
+                            value={filterCategory.location}
+                            onChange={(e) => setFilterCategory({ ...filterCategory, location: e.target.value })}
+                        />
+                    </div>
                 </div>
 
                 <div className="p-6">
-                    <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-lg font-semibold text-gray-800">New Requests Nearby</h2>
-                        <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">{requests.length} New</span>
-                    </div>
+                    <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <Zap size={20} className="text-yellow-500 fill-yellow-500" />
+                        New Requests ({filteredRequests.length})
+                    </h2>
 
                     <div className="space-y-4">
-                        {requests.length === 0 ? <p className="text-center text-gray-500">No new requests nearby.</p> : requests.map(req => (
+                        {filteredRequests.length === 0 ? <p className="text-center text-gray-500">No new requests nearby.</p> : filteredRequests.map(req => (
                             <div key={req._id} className="bg-white rounded-2xl p-5 shadow-md border border-gray-100">
                                 <div className="flex justify-between items-start mb-3">
                                     <div className="flex gap-3">

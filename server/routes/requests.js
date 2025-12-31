@@ -5,6 +5,24 @@ const ServiceRequest = require('../models/ServiceRequest');
 const ServiceProvider = require('../models/ServiceProvider');
 const Transaction = require('../models/Transaction');
 const User = require('../models/User');
+const Notification = require('../models/Notification');
+
+// Helper: Check and Expire Timeout
+const checkTimeout = async (request) => {
+    if (request.status === 'accepted' && request.acceptedAt) {
+        const timeout = 15 * 60 * 1000; // 15 Minutes
+        if (Date.now() - new Date(request.acceptedAt).getTime() > timeout) {
+            request.status = 'open';
+            request.provider = null;
+            request.acceptedAt = null;
+            request.acceptanceFeePaid = false; // Refund? Prompt says "Do not deduct confirmation fee". Implications on acceptance fee are vague, assume forfeit or refund. Logic: "Provider is released".
+            // Simpler: Just reset.
+            await request.save();
+            return true; // Expired
+        }
+    }
+    return false;
+};
 
 // Create Request (Client)
 router.post('/', auth, async (req, res) => {
@@ -17,35 +35,36 @@ router.post('/', auth, async (req, res) => {
             client: req.user.id,
             category,
             problemDescription,
-            location
+            location,
+            status: 'open'
         });
 
         await newRequest.save();
+
+        // Notify Providers? (Too many, skip for now or broadcast)
+
         res.status(201).json(newRequest);
     } catch (err) {
         res.status(500).json({ message: 'Server Error', error: err.message });
     }
 });
 
-// List Requests (Provider)
-// Should filter by category and location (optional)
+// List Nearby Requests (Provider)
 router.get('/nearby', auth, async (req, res) => {
     if (req.user.role !== 'provider') return res.status(403).json({ message: 'Only providers can view requests' });
 
     try {
-        // Get provider details to match category
         const provider = await ServiceProvider.findById(req.user.id);
         if (!provider) return res.status(404).json({ message: 'Provider not found' });
 
         if (!provider.isVerified) return res.status(403).json({ message: 'Provider not verified' });
+        if (!provider.isAvailable) return res.status(200).json([]); // Return empty if unavailable
 
-        // Find pending requests in provider's category
-        // Simple logic: Match category exactly.
+        // Fetch requests
         const requests = await ServiceRequest.find({
             category: provider.category,
-            status: 'pending'
-        }).populate('client', 'name location'); // Start with minimal info? 
-        // Prompt: "Nearby approved providers can see... Problem, Location"
+            status: 'open'
+        }).populate('client', 'name location');
 
         res.json(requests);
     } catch (err) {
@@ -56,26 +75,39 @@ router.get('/nearby', auth, async (req, res) => {
 // Get My Requests (Client)
 router.get('/my-requests', auth, async (req, res) => {
     try {
-        const requests = await ServiceRequest.find({ client: req.user.id })
+        // Expire timed out requests on fetch
+        const requests = await ServiceRequest.find({ client: req.user.id }).sort({ createdAt: -1 });
+
+        // Check timeouts
+        for (let req of requests) {
+            await checkTimeout(req);
+        }
+
+        // Re-fetch to get populated data and guaranteed status
+        const updatedRequests = await ServiceRequest.find({ client: req.user.id })
             .populate('provider', 'name rating phone isVerified')
             .sort({ createdAt: -1 });
-        res.json(requests);
+
+        res.json(updatedRequests);
     } catch (err) {
         res.status(500).json({ message: 'Server Error' });
     }
 });
+
 // Get Single Request Details
 router.get('/:id', auth, async (req, res) => {
     try {
-        const request = await ServiceRequest.findById(req.params.id)
-            .populate('client', 'name phone location')
-            .populate('provider', 'name phone rating isVerified jobsCompleted');
-
+        let request = await ServiceRequest.findById(req.params.id);
         if (!request) return res.status(404).json({ message: 'Request not found' });
 
-        // Access control?
-        // Client can see their own.
-        // Provider can see if they accepted it, or if it is pending (limited info).
+        // Check Timeout
+        if (await checkTimeout(request)) {
+            // Reload if modified
+            request = await ServiceRequest.findById(req.params.id);
+        }
+
+        await request.populate('client', 'name phone location');
+        await request.populate('provider', 'name phone rating isVerified jobsCompleted');
 
         res.json(request);
     } catch (err) {
@@ -83,24 +115,45 @@ router.get('/:id', auth, async (req, res) => {
     }
 });
 
-// Accept Request (Provider) -> Pays Acceptance Fee
+// Accept Request (Provider)
 router.put('/:id/accept', auth, async (req, res) => {
     if (req.user.role !== 'provider') return res.status(403).json({ message: 'Only providers can accept requests' });
 
     try {
+        const provider = await ServiceProvider.findById(req.user.id);
+        if (!provider.isAvailable) return res.status(400).json({ message: 'You are marked as away/unavailable' });
+
+        // Daily Limit Logic
+        const today = new Date().setHours(0, 0, 0, 0);
+        const lastDate = provider.lastAcceptanceDate ? new Date(provider.lastAcceptanceDate).setHours(0, 0, 0, 0) : 0;
+
+        let dailyCount = provider.dailyAcceptanceCount || 0;
+        if (lastDate !== today) {
+            dailyCount = 0; // Reset
+        }
+
+        if (dailyCount >= 3) {
+            return res.status(400).json({ message: 'Daily acceptance limit (3) reached' });
+        }
+
         const request = await ServiceRequest.findById(req.params.id);
         if (!request) return res.status(404).json({ message: 'Request not found' });
-        if (request.status !== 'pending') return res.status(400).json({ message: 'Request already accepted' });
+        if (request.status !== 'open' && request.status !== 'pending') return res.status(400).json({ message: 'Request already accepted or not open' });
 
-        // Simulate Fee Payment
-        const feeAmount = 30; // 30-50 range
-        // In real app, verify balance or process payment here.
+        // Simulate Fee
+        const feeAmount = 30;
 
+        // Update Request
         request.provider = req.user.id;
-        request.status = 'accepted'; // Wait for confirm? Prompt: "Step 3: Provider Accepts... Client is notified"
+        request.status = 'accepted';
         request.acceptanceFeePaid = true;
-
+        request.acceptedAt = Date.now();
         await request.save();
+
+        // Update Provider Limits
+        provider.dailyAcceptanceCount = dailyCount + 1;
+        provider.lastAcceptanceDate = Date.now();
+        await provider.save();
 
         // Log Transaction
         await Transaction.create({
@@ -111,37 +164,45 @@ router.put('/:id/accept', auth, async (req, res) => {
             requestId: request._id
         });
 
+        // Notify Client
+        await Notification.create({
+            user: request.client,
+            userType: 'User',
+            message: `A provider (${provider.name}) has accepted your request! Confirm within 15 mins.`
+        });
+
         res.json({ message: 'Request accepted', request });
     } catch (err) {
         res.status(500).json({ message: 'Server Error', error: err.message });
     }
 });
 
-// Confirm Provider (Client) -> Pays Confirmation Fee
+// Confirm Provider (Client)
 router.put('/:id/confirm', auth, async (req, res) => {
     if (req.user.role !== 'client') return res.status(403).json({ message: 'Only clients can confirm' });
 
     try {
-        const request = await ServiceRequest.findById(req.params.id);
+        let request = await ServiceRequest.findById(req.params.id);
         if (!request) return res.status(404).json({ message: 'Request not found' });
 
-        // Ensure user is the owner
         if (request.client.toString() !== req.user.id) return res.status(403).json({ message: 'Not authorized' });
+
+        // Check timeout before confirming
+        if (await checkTimeout(request)) {
+            return res.status(400).json({ message: 'Acceptance expired. Provider released.' });
+        }
 
         if (request.status !== 'accepted') return res.status(400).json({ message: 'Request not in accepted state' });
 
-        // Simulate Fee Payment
+        // Simulate Fee
         const feeAmount = 20;
 
         request.status = 'confirmed';
         request.confirmationFeePaid = true;
-
         await request.save();
 
-        // Increment provider jobs?
         await ServiceProvider.findByIdAndUpdate(request.provider, { $inc: { jobsCompleted: 1 } });
 
-        // Log Transaction
         await Transaction.create({
             user: req.user.id,
             userType: 'User',
@@ -150,10 +211,52 @@ router.put('/:id/confirm', auth, async (req, res) => {
             requestId: request._id
         });
 
+        // Notify Provider
+        await Notification.create({
+            user: request.provider,
+            userType: 'ServiceProvider',
+            message: `Client has confirmed! You can now view their contact details.`
+        });
+
         res.json({ message: 'Provider confirmed', request });
     } catch (err) {
         res.status(500).json({ message: 'Server Error', error: err.message });
     }
 });
+
+// Cancel Request (Provider) -> Penalty
+router.put('/:id/cancel', auth, async (req, res) => {
+    if (req.user.role !== 'provider') return res.status(403).json({ message: 'Only providers can cancel' });
+
+    try {
+        const request = await ServiceRequest.findById(req.params.id);
+        if (!request) return res.status(404).json({ message: 'Request not found' });
+
+        if (request.provider.toString() !== req.user.id) return res.status(403).json({ message: 'Not authorized' });
+        if (request.status !== 'accepted') return res.status(400).json({ message: 'Can only cancel accepted requests' });
+
+        // Penalize Provider
+        await ServiceProvider.findByIdAndUpdate(req.user.id, { $inc: { cancellationCount: 1 } });
+
+        // Reset Request
+        request.status = 'open';
+        request.provider = null;
+        request.acceptedAt = null;
+        await request.save();
+
+        // Notify Client
+        await Notification.create({
+            user: request.client,
+            userType: 'User',
+            message: `Provider cancelled the request. It is now open for others.`
+        });
+
+        res.json({ message: 'Request cancelled. Cancellation recorded.' });
+
+    } catch (err) {
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
 
 module.exports = router;
