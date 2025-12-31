@@ -8,6 +8,8 @@ const RequestDetails = () => {
     const navigate = useNavigate();
     const [request, setRequest] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [review, setReview] = useState({ rating: 5, comment: '' });
+    const [reviewSubmitted, setReviewSubmitted] = useState(false);
 
     useEffect(() => {
         const fetchRequest = async () => {
@@ -33,6 +35,25 @@ const RequestDetails = () => {
         } catch (err) {
             console.error(err);
             alert('Failed to confirm provider');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleReviewSubmit = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            await api.post('/reviews', {
+                requestId: id,
+                rating: review.rating,
+                comment: review.comment
+            });
+            alert('Review Submitted');
+            setReviewSubmitted(true);
+        } catch (err) {
+            console.error(err);
+            alert('Failed to submit review');
         } finally {
             setLoading(false);
         }
@@ -93,9 +114,42 @@ const RequestDetails = () => {
                                     )}
 
                                     {request.status === 'confirmed' && (
-                                        <div className="bg-green-50 text-green-800 p-3 rounded-lg text-sm font-medium flex items-center gap-2">
-                                            <Phone size={16} />
-                                            {request.provider.phone}
+                                        <div className="space-y-3">
+                                            <div className="bg-green-50 text-green-800 p-3 rounded-lg text-sm font-medium flex items-center gap-2">
+                                                <Phone size={16} />
+                                                {request.provider.phone}
+                                            </div>
+
+                                            {!reviewSubmitted && (
+                                                <form onSubmit={handleReviewSubmit} className="bg-gray-50 p-3 rounded-xl border mt-4">
+                                                    <p className="text-xs font-semibold mb-2">Rate Service</p>
+                                                    <div className="flex gap-2 mb-2">
+                                                        {[1, 2, 3, 4, 5].map(star => (
+                                                            <button
+                                                                key={star}
+                                                                type="button"
+                                                                onClick={() => setReview({ ...review, rating: star })}
+                                                                className={`${review.rating >= star ? 'text-yellow-400' : 'text-gray-300'}`}
+                                                            >
+                                                                <Star size={20} fill="currentColor" />
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                    <textarea
+                                                        placeholder="Comment..."
+                                                        className="w-full text-xs p-2 rounded border mb-2"
+                                                        value={review.comment}
+                                                        onChange={e => setReview({ ...review, comment: e.target.value })}
+                                                    />
+                                                    <button
+                                                        type="submit"
+                                                        disabled={loading}
+                                                        className="w-full bg-indigo-600 text-white text-xs py-2 rounded"
+                                                    >
+                                                        Submit Review
+                                                    </button>
+                                                </form>
+                                            )}
                                         </div>
                                     )}
                                 </div>

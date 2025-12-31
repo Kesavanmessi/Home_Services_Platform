@@ -8,6 +8,7 @@ import ClientHome from './pages/ClientHome';
 import CreateRequest from './pages/CreateRequest';
 import ProviderDashboard from './pages/ProviderDashboard';
 import RequestDetails from './pages/RequestDetails';
+import AdminDashboard from './pages/AdminDashboard';
 import PrivateRoute from './components/PrivateRoute';
 
 function App() {
@@ -52,6 +53,8 @@ function App() {
               </PrivateRoute>
             }
           />
+
+          <Route path="/admin" element={<AdminDashboard />} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" />} />
