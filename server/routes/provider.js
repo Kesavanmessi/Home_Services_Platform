@@ -44,8 +44,45 @@ router.post('/verification/upload', auth, async (req, res) => {
 
 // Get Provider Profile (Modified to include full details)
 router.get('/profile', auth, async (req, res) => {
+    if (req.user.role !== 'provider') return res.status(403).json({ message: 'Access denied' });
     try {
         const provider = await ServiceProvider.findById(req.user.id).select('-password');
+        if (!provider) return res.status(404).json({ message: 'Provider profile not found' });
+        res.json(provider);
+    } catch (err) {
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
+// Update Settings
+router.put('/settings', auth, async (req, res) => {
+    try {
+        const { workingHours, serviceRadius, coordinates } = req.body;
+        const provider = await ServiceProvider.findByIdAndUpdate(
+            req.user.id,
+            { workingHours, serviceRadius, coordinates },
+            { new: true }
+        );
+        res.json(provider);
+    } catch (err) {
+        console.error("Settings Update Error:", err);
+        res.status(500).json({ message: 'Server Error', error: err.message });
+    }
+});
+
+// Submit Interview Availability
+router.post('/verification/availability', auth, async (req, res) => {
+    try {
+        const { availability } = req.body; // Array of {date, time}
+
+        const provider = await ServiceProvider.findByIdAndUpdate(
+            req.user.id,
+            {
+                interviewAvailability: availability,
+                verificationStatus: 'pending_admin_schedule'
+            },
+            { new: true }
+        );
         res.json(provider);
     } catch (err) {
         res.status(500).json({ message: 'Server Error' });

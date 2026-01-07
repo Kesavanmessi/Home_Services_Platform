@@ -15,8 +15,7 @@ const checkTimeout = async (request) => {
             request.status = 'open';
             request.provider = null;
             request.acceptedAt = null;
-            request.acceptanceFeePaid = false; // Refund? Prompt says "Do not deduct confirmation fee". Implications on acceptance fee are vague, assume forfeit or refund. Logic: "Provider is released".
-            // Simpler: Just reset.
+            request.acceptanceFeePaid = false;
             await request.save();
             return true; // Expired
         }
@@ -29,19 +28,18 @@ router.post('/', auth, async (req, res) => {
     if (req.user.role !== 'client') return res.status(403).json({ message: 'Only clients can post requests' });
 
     try {
-        const { category, problemDescription, location } = req.body;
+        const { category, problemDescription, location, coordinates } = req.body; // Added coordinates
 
         const newRequest = new ServiceRequest({
             client: req.user.id,
             category,
             problemDescription,
             location,
+            coordinates,
             status: 'open'
         });
 
         await newRequest.save();
-
-        // Notify Providers? (Too many, skip for now or broadcast)
 
         res.status(201).json(newRequest);
     } catch (err) {
@@ -60,11 +58,37 @@ router.get('/nearby', auth, async (req, res) => {
         if (!provider.isVerified) return res.status(403).json({ message: 'Provider not verified' });
         if (!provider.isAvailable) return res.status(200).json([]); // Return empty if unavailable
 
-        // Fetch requests
-        const requests = await ServiceRequest.find({
+        // Fetch requests (Filter by Category first)
+        let requests = await ServiceRequest.find({
             category: provider.category,
             status: 'open'
-        }).populate('client', 'name location');
+        }).populate('client', 'name location'); // Only expose name/location
+
+        // Filter by Distance (Haversine)
+        if (provider.coordinates && provider.coordinates.lat) {
+            const R = 6371; // Earth Radius in km
+            const pLat = provider.coordinates.lat * Math.PI / 180;
+            const pLng = provider.coordinates.lng * Math.PI / 180;
+
+            requests = requests.filter(req => {
+                if (!req.coordinates || !req.coordinates.lat) return true;
+
+                const rLat = req.coordinates.lat * Math.PI / 180;
+                const rLng = req.coordinates.lng * Math.PI / 180;
+
+                const dLat = rLat - pLat;
+                const dLng = rLng - pLng;
+
+                const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                    Math.cos(pLat) * Math.cos(rLat) *
+                    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                const d = R * c;
+
+                return d <= (provider.serviceRadius || 20);
+            });
+        }
 
         res.json(requests);
     } catch (err) {
@@ -75,20 +99,26 @@ router.get('/nearby', auth, async (req, res) => {
 // Get My Requests (Client)
 router.get('/my-requests', auth, async (req, res) => {
     try {
-        // Expire timed out requests on fetch
         const requests = await ServiceRequest.find({ client: req.user.id }).sort({ createdAt: -1 });
 
-        // Check timeouts
         for (let req of requests) {
             await checkTimeout(req);
         }
 
-        // Re-fetch to get populated data and guaranteed status
         const updatedRequests = await ServiceRequest.find({ client: req.user.id })
             .populate('provider', 'name rating phone isVerified')
             .sort({ createdAt: -1 });
 
-        res.json(updatedRequests);
+        // Hide provider phone if not confirmed
+        const saneRequests = updatedRequests.map(req => {
+            const r = req.toObject();
+            if (r.status !== 'confirmed' && r.status !== 'completed' && r.provider) {
+                r.provider.phone = 'HIDDEN';
+            }
+            return r;
+        });
+
+        res.json(saneRequests);
     } catch (err) {
         res.status(500).json({ message: 'Server Error' });
     }
@@ -100,16 +130,30 @@ router.get('/:id', auth, async (req, res) => {
         let request = await ServiceRequest.findById(req.params.id);
         if (!request) return res.status(404).json({ message: 'Request not found' });
 
-        // Check Timeout
         if (await checkTimeout(request)) {
-            // Reload if modified
             request = await ServiceRequest.findById(req.params.id);
         }
 
         await request.populate('client', 'name phone location');
         await request.populate('provider', 'name phone rating isVerified jobsCompleted');
 
-        res.json(request);
+        const saneRequest = request.toObject();
+
+        // Privacy Logic
+        if (req.user.role === 'client') {
+            // If I am client, hide provider phone if not confirmed
+            if (saneRequest.status !== 'confirmed' && saneRequest.status !== 'completed' && saneRequest.provider) {
+                saneRequest.provider.phone = 'HIDDEN';
+            }
+        } else if (req.user.role === 'provider') {
+            // If I am provider, hide client phone/location details if not confirmed
+            if (saneRequest.status !== 'confirmed' && saneRequest.status !== 'completed') {
+                saneRequest.client.phone = 'HIDDEN';
+                // saneRequest.location = 'HIDDEN'; // Maybe show area but hide precision? Keeping simple for now as per prompt "details of user".
+            }
+        }
+
+        res.json(saneRequest);
     } catch (err) {
         res.status(500).json({ message: 'Server Error' });
     }
@@ -128,29 +172,25 @@ router.put('/:id/accept', auth, async (req, res) => {
         const lastDate = provider.lastAcceptanceDate ? new Date(provider.lastAcceptanceDate).setHours(0, 0, 0, 0) : 0;
 
         let dailyCount = provider.dailyAcceptanceCount || 0;
-        if (lastDate !== today) {
-            dailyCount = 0; // Reset
-        }
+        if (lastDate !== today) dailyCount = 0;
 
-        if (dailyCount >= 3) {
-            return res.status(400).json({ message: 'Daily acceptance limit (3) reached' });
-        }
+        if (dailyCount >= 3) return res.status(400).json({ message: 'Daily acceptance limit (3) reached' });
 
         const request = await ServiceRequest.findById(req.params.id);
         if (!request) return res.status(404).json({ message: 'Request not found' });
-        if (request.status !== 'open' && request.status !== 'pending') return res.status(400).json({ message: 'Request already accepted or not open' });
+        if (request.status !== 'open') return res.status(400).json({ message: 'Request already accepted or not open' });
 
-        // Check for Trial Jobs
+        // Payment Logic
         let description = 'Service Request Accepted';
-        let amount = 30;
-        let isTrial = false;
+        let amount = 30; // Fee
 
-        if (provider.trialJobsLeft > 0) {
-            isTrial = true;
-            provider.trialJobsLeft -= 1;
-            description = `Trial Job Used (${provider.trialJobsLeft} remaining)`;
+        // Check Balance
+        if (provider.walletBalance < amount) {
+            return res.status(400).json({ message: `Insufficient wallet balance. Minimum ₹${amount} required.` });
         }
-        // Else: Check Wallet Balance logic here if implemented
+
+        // Deduct Fee
+        provider.walletBalance -= amount;
 
         // Update Request
         request.provider = req.user.id;
@@ -168,7 +208,7 @@ router.put('/:id/accept', auth, async (req, res) => {
         await Transaction.create({
             user: req.user.id,
             userType: 'ServiceProvider',
-            amount: isTrial ? 0 : -amount,
+            amount: -amount,
             type: 'acceptance_fee',
             description: description,
             requestId: request._id
@@ -178,7 +218,7 @@ router.put('/:id/accept', auth, async (req, res) => {
         await Notification.create({
             user: request.client,
             userType: 'User',
-            message: `A provider (${provider.name}) has accepted your request! Confirm within 15 mins.`
+            message: `A provider (${provider.name}) has accepted your request! Confirm now.`
         });
 
         res.json({ message: 'Request accepted', request });
@@ -194,18 +234,21 @@ router.put('/:id/confirm', auth, async (req, res) => {
     try {
         let request = await ServiceRequest.findById(req.params.id);
         if (!request) return res.status(404).json({ message: 'Request not found' });
-
         if (request.client.toString() !== req.user.id) return res.status(403).json({ message: 'Not authorized' });
 
-        // Check timeout before confirming
-        if (await checkTimeout(request)) {
-            return res.status(400).json({ message: 'Acceptance expired. Provider released.' });
-        }
-
+        if (await checkTimeout(request)) return res.status(400).json({ message: 'Acceptance expired. Provider released.' });
         if (request.status !== 'accepted') return res.status(400).json({ message: 'Request not in accepted state' });
 
-        // Simulate Fee
-        const feeAmount = 20;
+        // Payment Logic
+        const client = await User.findById(req.user.id);
+        const amount = 20;
+
+        if (client.walletBalance < amount) {
+            return res.status(400).json({ message: `Insufficient wallet balance. Minimum ₹${amount} required.` });
+        }
+
+        client.walletBalance -= amount;
+        await client.save();
 
         request.status = 'confirmed';
         request.confirmationFeePaid = true;
@@ -216,7 +259,7 @@ router.put('/:id/confirm', auth, async (req, res) => {
         await Transaction.create({
             user: req.user.id,
             userType: 'User',
-            amount: feeAmount,
+            amount: -amount,
             type: 'confirmation_fee',
             requestId: request._id
         });
@@ -225,7 +268,7 @@ router.put('/:id/confirm', auth, async (req, res) => {
         await Notification.create({
             user: request.provider,
             userType: 'ServiceProvider',
-            message: `Client has confirmed! You can now view their contact details.`
+            message: `Client has confirmed! You can now view their details.`
         });
 
         res.json({ message: 'Provider confirmed', request });
@@ -234,34 +277,81 @@ router.put('/:id/confirm', auth, async (req, res) => {
     }
 });
 
-// Cancel Request (Provider) -> Penalty
+// Cancel Request (Generic)
 router.put('/:id/cancel', auth, async (req, res) => {
-    if (req.user.role !== 'provider') return res.status(403).json({ message: 'Only providers can cancel' });
+    const { reason } = req.body;
+    if (!reason) return res.status(400).json({ message: 'Cancellation reason is required' });
 
     try {
         const request = await ServiceRequest.findById(req.params.id);
         if (!request) return res.status(404).json({ message: 'Request not found' });
 
-        if (request.provider.toString() !== req.user.id) return res.status(403).json({ message: 'Not authorized' });
-        if (request.status !== 'accepted') return res.status(400).json({ message: 'Can only cancel accepted requests' });
+        const isClient = req.user.role === 'client' && request.client.toString() === req.user.id;
+        const isProvider = req.user.role === 'provider' && request.provider && request.provider.toString() === req.user.id;
+        const isAdmin = req.user.role === 'admin';
 
-        // Penalize Provider
-        await ServiceProvider.findByIdAndUpdate(req.user.id, { $inc: { cancellationCount: 1 } });
+        if (!isClient && !isProvider && !isAdmin) return res.status(403).json({ message: 'Not authorized' });
 
-        // Reset Request
-        request.status = 'open';
-        request.provider = null;
-        request.acceptedAt = null;
+        // Logic based on state
+        // If OPEN: Client can cancel freely.
+        // If ACCEPTED/CONFIRMED: Penalties apply.
+
+        if (request.status === 'open') {
+            request.status = 'cancelled';
+            request.cancellationReason = reason;
+            request.cancelledBy = req.user.role;
+            await request.save();
+            return res.json({ message: 'Request cancelled' });
+        }
+
+        // Penalty Logic
+        const penaltyAmount = 50;
+        const providerRefund = 30;
+        const clientRefund = 20;
+
+        if (isClient) {
+            // Client Cancelled after Accept/Confirm
+            // Penalize Client 50
+            const client = await User.findById(request.client);
+            client.walletBalance -= penaltyAmount; // Can go negative
+            await client.save();
+            await Transaction.create({ user: client._id, userType: 'User', amount: -penaltyAmount, type: 'penalty', description: 'Cancelled Service', requestId: request._id });
+
+            // Refund Provider 30 (Acceptance Fee)
+            if (request.provider) {
+                const provider = await ServiceProvider.findById(request.provider);
+                provider.walletBalance += providerRefund;
+                await provider.save();
+                await Transaction.create({ user: provider._id, userType: 'ServiceProvider', amount: providerRefund, type: 'refund', description: 'Refund: Client Cancelled', requestId: request._id });
+
+                await Notification.create({ user: provider._id, userType: 'ServiceProvider', message: `Client cancelled. ₹${providerRefund} refunded to wallet.` });
+            }
+
+        } else if (isProvider) {
+            // Provider Cancelled
+            // Penalize Provider 50
+            const provider = await ServiceProvider.findById(request.provider);
+            provider.walletBalance -= penaltyAmount;
+            await provider.save();
+            await Transaction.create({ user: provider._id, userType: 'ServiceProvider', amount: -penaltyAmount, type: 'penalty', description: 'Cancelled Job', requestId: request._id });
+
+            // Refund Client 20 (If Confirmed)
+            if (request.confirmationFeePaid) {
+                const client = await User.findById(request.client);
+                client.walletBalance += clientRefund;
+                await client.save();
+                await Transaction.create({ user: client._id, userType: 'User', amount: clientRefund, type: 'refund', description: 'Refund: Provider Cancelled', requestId: request._id });
+
+                await Notification.create({ user: client._id, userType: 'User', message: `Provider cancelled. ₹${clientRefund} refunded to wallet.` });
+            }
+        }
+
+        request.status = 'cancelled';
+        request.cancellationReason = reason;
+        request.cancelledBy = req.user.role;
         await request.save();
 
-        // Notify Client
-        await Notification.create({
-            user: request.client,
-            userType: 'User',
-            message: `Provider cancelled the request. It is now open for others.`
-        });
-
-        res.json({ message: 'Request cancelled. Cancellation recorded.' });
+        res.json({ message: 'Request cancelled with applicable penalties/refunds.' });
 
     } catch (err) {
         res.status(500).json({ message: 'Server Error' });

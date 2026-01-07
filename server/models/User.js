@@ -6,6 +6,7 @@ const userSchema = new mongoose.Schema({
     password: { type: String, required: true },
     phone: { type: String },
     role: { type: String, default: 'client' },
+    walletBalance: { type: Number, default: 500 }, // Default 500 for testing
     createdAt: { type: Date, default: Date.now }
 });
 

@@ -11,21 +11,48 @@ const serviceProviderSchema = new mongoose.Schema({
     isVerified: { type: Boolean, default: false }, // Keep for backward compatibility, sync with status
     verificationStatus: {
         type: String,
-        enum: ['pending_documents', 'pending_verification', 'documents_verified', 'documents_rejected', 'interview_scheduled', 'verified', 'failed'],
+        enum: [
+            'pending_documents',
+            'pending_verification',
+            'documents_verified',
+            'documents_rejected',
+            'pending_interview_availability', // New: Admin approved docs, waiting for provider slots
+            'pending_admin_schedule',       // New: Provider submitted slots, waiting for admin to pick
+            'interview_scheduled',
+            'verified',
+            'failed'
+        ],
         default: 'pending_documents'
     },
     documents: {
         idProof: { type: String }, // URL or Base64
         selfie: { type: String }   // URL or Base64
     },
+    interviewAvailability: [{
+        date: String, // ISO Date string or "YYYY-MM-DD"
+        time: String  // "HH:mm"
+    }],
     interviewDate: { type: Date },
     trialJobsLeft: { type: Number, default: 0 },
+
+    // New Fields for Filter
+    workingHours: {
+        start: { type: String, default: '08:00' },
+        end: { type: String, default: '18:00' }
+    },
+    serviceRadius: { type: Number, default: 20, min: 5, max: 30 },
+    coordinates: {
+        lat: { type: Number },
+        lng: { type: Number }
+    },
+
     isAvailable: { type: Boolean, default: true },
     cancellationCount: { type: Number, default: 0 },
     dailyAcceptanceCount: { type: Number, default: 0 },
     lastAcceptanceDate: { type: Date },
     rating: { type: Number, default: 0 },
     jobsCompleted: { type: Number, default: 0 },
+    walletBalance: { type: Number, default: 500 }, // Default 500 for testing
     role: { type: String, default: 'provider' },
     createdAt: { type: Date, default: Date.now }
 });

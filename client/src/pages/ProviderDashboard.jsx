@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api';
-import { RefreshCw, Upload, Clock, CheckCircle, XCircle, Calendar, Zap, MapPin } from 'lucide-react';
+import { RefreshCw, Upload, Clock, CheckCircle, XCircle, Calendar, Zap, MapPin, Shield, Plus } from 'lucide-react';
 
 const ProviderDashboard = () => {
     const { user, login } = useAuth(); // Re-fetch user profile mechanism
@@ -9,17 +9,39 @@ const ProviderDashboard = () => {
     const [files, setFiles] = useState({ idProof: '', selfie: '' });
     const [loading, setLoading] = useState(false);
 
+    // Availability State
+    const [availabilitySlots, setAvailabilitySlots] = useState([]);
+
+    // Settings State
+    const [showSettings, setShowSettings] = useState(false);
+    const [settings, setSettings] = useState({
+        start: '08:00',
+        end: '18:00',
+        radius: 20,
+        lat: 0,
+        lng: 0
+    });
+
     // Dashboard State
     const [requests, setRequests] = useState([]);
     const [isAvailable, setIsAvailable] = useState(true);
 
+    const [cancelModal, setCancelModal] = useState({ show: false, reqId: null, reason: '' });
+
     const fetchProfile = async () => {
         try {
             const res = await api.get('/provider/profile');
-            setProfile(res.data);
-            setIsAvailable(res.data.isAvailable);
+            if (res.data) {
+                setProfile(res.data);
+                setIsAvailable(res.data.isAvailable);
+            }
         } catch (err) {
             console.error('Failed to fetch profile', err);
+            if (err.response && (err.response.status === 404 || err.response.status === 403)) {
+                alert('Profile not found. Please login again.');
+                login(null, null); // Force logout/clear state if possible, or just redirect
+                window.location.href = '/';
+            }
         }
     };
 
@@ -37,7 +59,7 @@ const ProviderDashboard = () => {
         if (profile?.verificationStatus === 'verified') {
             fetchRequests();
         }
-    }, []);
+    }, [profile?.verificationStatus]); // Added dependency
 
     const handleFileChange = (e, type) => {
         const file = e.target.files[0];
@@ -74,19 +96,52 @@ const ProviderDashboard = () => {
         }
     };
 
+    const submitAvailability = async () => {
+        setLoading(true);
+        try {
+            await api.post('/provider/verification/availability', { availability: availabilitySlots });
+            alert('Availability Submitted!');
+            fetchProfile();
+        } catch (err) {
+            console.error(err);
+            alert('Failed to submit availability');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const saveSettings = async () => {
+        setLoading(true);
+        try {
+            await api.put('/provider/settings', {
+                workingHours: { start: settings.start, end: settings.end },
+                serviceRadius: settings.radius,
+                coordinates: { lat: settings.lat, lng: settings.lng }
+            });
+            alert('Settings Updated!');
+            setShowSettings(false);
+            fetchProfile();
+        } catch (err) {
+            console.error(err);
+            alert('Failed to save settings');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleAccept = async (id) => {
         const confirmMsg = profile.trialJobsLeft > 0
             ? `Accept this job using 1 Trial Job? (${profile.trialJobsLeft} remaining)`
-            : 'Accepting this request will deduct ₹30 from your wallet. Proceed?';
+            : `Accepting this request will deduct ₹30 from your wallet (Balance: ₹${profile.walletBalance}). Proceed?`;
 
         if (!window.confirm(confirmMsg)) return;
 
         setLoading(true);
         try {
             await api.put(`/requests/${id}/accept`);
-            alert('Request Accepted!');
+            alert('Request Accepted! Client notified.');
             fetchRequests();
-            fetchProfile(); // Update trial count
+            fetchProfile(); // Update wallet/trial
         } catch (err) {
             console.error(err);
             alert(err.response?.data?.message || 'Failed to accept');
@@ -97,7 +152,7 @@ const ProviderDashboard = () => {
 
     // --- RENDER LOGIC BASED ON STATUS ---
 
-    if (!profile) return <div>Loading...</div>;
+    if (!profile) return <div className="p-10 text-center">Loading...</div>;
 
     // 1. Pending Documents
     if (profile.verificationStatus === 'pending_documents') {
@@ -190,10 +245,62 @@ const ProviderDashboard = () => {
         );
     }
 
-    // 5. Verified (Main Dashboard)
+    const handleAddMoney = async () => {
+        const amount = prompt('Enter amount to add (₹):');
+        if (!amount || isNaN(amount) || amount <= 0) return;
+
+        try {
+            await api.post('/transactions/add', { amount: Number(amount) });
+            alert('Money Added Successfully!');
+            fetchProfile(); // Update balance
+        } catch (err) {
+            console.error(err);
+            alert('Failed to add money');
+        }
+    };
+
     return (
         <div className="min-h-screen bg-gray-50">
-            <div className="max-w-md mx-auto bg-white min-h-screen shadow-xl">
+            <div className="max-w-md mx-auto bg-white min-h-screen shadow-xl relative">
+
+                {/* Settings Modal */}
+                {showSettings && (
+                    <div className="absolute inset-0 bg-white z-50 p-6 overflow-y-auto">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-2xl font-bold">Settings</h2>
+                            <button onClick={() => setShowSettings(false)} className="p-2 bg-gray-100 rounded-full"><XCircle size={24} /></button>
+                        </div>
+                        {/* ... existing settings content ... */}
+                        <div className="space-y-6">
+                            <div>
+                                <label className="block font-medium mb-2">Working Hours</label>
+                                <div className="flex gap-4">
+                                    <div className="flex-1">
+                                        <span className="text-xs text-gray-500">Start</span>
+                                        <input type="time" value={settings.start} onChange={e => setSettings({ ...settings, start: e.target.value })} className="w-full border p-2 rounded-lg" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <span className="text-xs text-gray-500">End</span>
+                                        <input type="time" value={settings.end} onChange={e => setSettings({ ...settings, end: e.target.value })} className="w-full border p-2 rounded-lg" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block font-medium mb-2">Service Radius ({settings.radius} km)</label>
+                                <input
+                                    type="range" min="5" max="30" step="1"
+                                    value={settings.radius}
+                                    onChange={e => setSettings({ ...settings, radius: parseInt(e.target.value) })}
+                                    className="w-full accent-indigo-600"
+                                />
+                            </div>
+
+                            <button onClick={saveSettings} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold">Save Settings</button>
+                        </div>
+                    </div>
+                )}
+
                 <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white p-6 rounded-b-3xl">
                     <div className="flex justify-between items-center mb-6">
                         <div>
@@ -203,20 +310,28 @@ const ProviderDashboard = () => {
                             </div>
                             <p className="text-green-100 text-sm">{profile.category} Service Provider</p>
                         </div>
-                        <div className="bg-white/20 p-2 rounded-full">
-                            <div className="w-8 h-8 flex items-center justify-center font-bold">
-                                {profile.name[0]}
-                            </div>
-                        </div>
+                        <button onClick={() => setShowSettings(true)} className="bg-white/20 p-2 rounded-full hover:bg-white/30 transition">
+                            <MapPin size={24} />
+                        </button>
                     </div>
 
-                    {/* Trial Job Banner */}
-                    {profile.trialJobsLeft > 0 && (
-                        <div className="bg-yellow-400 text-yellow-900 px-4 py-2 rounded-lg mb-4 flex items-center gap-2 text-sm font-bold shadow-sm">
-                            <Zap size={16} />
-                            {profile.trialJobsLeft} Free Trial Jobs Remaining!
+                    {/* Wallet & Trial Status */}
+                    <div className="flex gap-2 mb-4">
+                        <div className="flex-1 bg-white/20 p-3 rounded-xl relative overflow-hidden">
+                            <p className="text-xs text-green-100 relative z-10">Wallet Balance</p>
+                            <p className="text-xl font-bold relative z-10">₹{profile.walletBalance}</p>
+                            <div className="flex gap-2 mt-2 relative z-10">
+                                <button onClick={handleAddMoney} className="bg-green-700/50 text-white p-1 px-2 rounded text-xs font-bold hover:bg-green-700">+ Add</button>
+                                <button onClick={() => window.location.href = '/provider/transactions'} className="bg-green-700/50 text-white p-1 px-2 rounded text-xs font-bold hover:bg-green-700">History</button>
+                            </div>
                         </div>
-                    )}
+                        {profile.trialJobsLeft > 0 && (
+                            <div className="flex-1 bg-yellow-400 text-yellow-900 p-3 rounded-xl shadow-sm">
+                                <p className="text-xs font-bold flex items-center gap-1"><Zap size={12} /> Trial Jobs</p>
+                                <p className="text-xl font-bold">{profile.trialJobsLeft} Left</p>
+                            </div>
+                        )}
+                    </div>
 
                     <div className="flex items-center justify-between bg-white/10 backdrop-blur-sm p-3 rounded-xl">
                         <span className="font-medium text-sm">Status: {isAvailable ? 'Online' : 'Offline'}</span>

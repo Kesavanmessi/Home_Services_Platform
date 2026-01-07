@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const ServiceProvider = require('../models/ServiceProvider');
+const auth = require('../middleware/auth');
 
 // Register Client
 router.post('/register-client', async (req, res) => {
@@ -92,11 +93,36 @@ router.post('/login', async (req, res) => {
                 name: user.name,
                 email: user.email,
                 role: user.role,
-                isVerified: user.role === 'provider' ? user.isVerified : undefined
+                isVerified: user.role === 'provider' ? user.isVerified : undefined,
+                walletBalance: user.walletBalance,
             }
         });
     } catch (err) {
         res.status(500).json({ message: 'Server Error', error: err.message });
+    }
+});
+
+// Get Current User (Load User)
+router.get('/user', auth, async (req, res) => {
+    try {
+        let user;
+        if (req.user.role === 'provider') {
+            user = await ServiceProvider.findById(req.user.id).select('-password');
+        } else if (req.user.role === 'admin') {
+            // Check for hardcoded admin ID from login
+            if (req.user.id === 'admin_id') {
+                user = { id: 'admin_id', name: 'Admin', email: 'admin@example.com', role: 'admin' };
+            } else {
+                // Future-proof: validation for DB admins if added later
+                user = await User.findById(req.user.id).select('-password');
+            }
+        } else {
+            user = await User.findById(req.user.id).select('-password');
+        }
+        res.json(user);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
     }
 });
 

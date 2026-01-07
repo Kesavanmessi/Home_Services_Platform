@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api';
+import { useAuth } from '../context/AuthContext';
 import { MapPin, Phone, CheckCircle, Star, User } from 'lucide-react';
 
 const RequestDetails = () => {
+    const { user } = useAuth(); // Need user for wallet
     const { id } = useParams();
     const navigate = useNavigate();
     const [request, setRequest] = useState(null);
@@ -12,30 +14,51 @@ const RequestDetails = () => {
     const [reviewSubmitted, setReviewSubmitted] = useState(false);
     const [disclaimerAccepted, setDisclaimerAccepted] = useState(false);
 
-    useEffect(() => {
-        const fetchRequest = async () => {
-            try {
-                const res = await api.get(`/requests/${id}`);
-                setRequest(res.data);
-            } catch (err) {
-                console.error(err);
-            }
-        };
-        fetchRequest();
-    }, [id]);
+    // Cancellation State
+    const [cancelModal, setCancelModal] = useState({ show: false, reason: '' });
 
-    const handleConfirm = async () => {
-        if (!window.confirm('Confirming provider will cost ₹20. Proceed?')) return;
-        setLoading(true);
+    const fetchRequest = async () => {
         try {
-            await api.put(`/requests/${id}/confirm`);
-            alert('Provider Confirmed! Contact details unlocked.');
-            // Reload
             const res = await api.get(`/requests/${id}`);
             setRequest(res.data);
         } catch (err) {
             console.error(err);
-            alert('Failed to confirm provider');
+        }
+    };
+
+    useEffect(() => {
+        fetchRequest();
+    }, [id]);
+
+    const handleConfirm = async () => {
+        const fee = 20;
+        if (!window.confirm(`Confirming provider will cost ₹${fee} from your wallet. Proceed?`)) return;
+        setLoading(true);
+        try {
+            await api.put(`/requests/${id}/confirm`);
+            alert('Provider Confirmed! Contact details unlocked.');
+            fetchRequest();
+        } catch (err) {
+            console.error(err);
+            alert(err.response?.data?.message || 'Failed to confirm provider');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleCancel = async () => {
+        if (!cancelModal.reason) return alert('Please provide a reason');
+        if (!window.confirm('Are you sure you want to cancel? Penalties may apply.')) return;
+
+        setLoading(true);
+        try {
+            const res = await api.put(`/requests/${id}/cancel`, { reason: cancelModal.reason });
+            alert(res.data.message);
+            setCancelModal({ show: false, reason: '' });
+            fetchRequest();
+        } catch (err) {
+            console.error(err);
+            alert('Failed to cancel request');
         } finally {
             setLoading(false);
         }
@@ -64,14 +87,65 @@ const RequestDetails = () => {
 
     return (
         <div className="min-h-screen bg-gray-50">
-            <div className="max-w-md mx-auto bg-white min-h-screen shadow-xl">
+            <div className="max-w-md mx-auto bg-white min-h-screen shadow-xl relative">
+
+                {/* Cancel Modal */}
+                {cancelModal.show && (
+                    <div className="absolute inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                        <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
+                            <h3 className="text-xl font-bold mb-4">Cancel Request</h3>
+                            <p className="text-sm text-gray-500 mb-4">
+                                {request.status === 'accepted' || request.status === 'confirmed'
+                                    ? 'Note: Cleaning fees (₹50) may apply for late cancellations.'
+                                    : 'No penalty for cancelling open requests.'}
+                            </p>
+                            <textarea
+                                className="w-full border p-3 rounded-lg mb-4 text-sm"
+                                placeholder="Reason for cancellation..."
+                                value={cancelModal.reason}
+                                onChange={e => setCancelModal({ ...cancelModal, reason: e.target.value })}
+                            />
+                            <div className="flex gap-3">
+                                <button onClick={() => setCancelModal({ show: false, reason: '' })} className="flex-1 py-2 text-gray-600 font-bold">Back</button>
+                                <button onClick={handleCancel} disabled={loading} className="flex-1 bg-red-500 text-white py-2 rounded-lg font-bold">Cancel Service</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 <div className="bg-gradient-to-r from-indigo-600 to-blue-600 text-white p-6">
-                    <button onClick={() => navigate('/client/home')} className="mb-4">← Back</button>
-                    <h1 className="text-2xl font-bold">Request Details</h1>
-                    <p className="text-blue-100 text-sm">Status: {request.status}</p>
+                    <div className="flex justify-between items-start mb-4">
+                        <button onClick={() => navigate('/client/home')}>← Back</button>
+                        {request.status !== 'cancelled' && request.status !== 'completed' && (
+                            <button onClick={() => setCancelModal({ show: true, reason: '' })} className="bg-white/20 px-3 py-1 rounded-lg text-xs font-bold hover:bg-red-500 hover:text-white transition">
+                                Cancel
+                            </button>
+                        )}
+                    </div>
+                    <div className="flex justify-between items-end">
+                        <div>
+                            <h1 className="text-2xl font-bold">Request Details</h1>
+                            <p className="text-blue-100 text-sm capitalize">Status: {request.status}</p>
+                        </div>
+                        {/* Wallet Display (Mocked from User Context if available, else fetch) */}
+                        <div className="bg-white/20 p-2 rounded-lg text-right">
+                            <p className="text-xs text-blue-100">My Wallet</p>
+                            {/* Note: Ideally fetch user.walletBalance from context/api re-fetch */}
+                            <p className="font-bold">₹{user?.walletBalance || '---'}</p>
+                        </div>
+                    </div>
                 </div>
 
                 <div className="p-6 space-y-6">
+                    {/* Cancellation Banner */}
+                    {request.status === 'cancelled' && (
+                        <div className="bg-red-50 border border-red-200 p-4 rounded-xl text-red-800">
+                            <p className="font-bold">Request Cancelled</p>
+                            <p className="text-sm">Reason: {request.cancellationReason}</p>
+                            <p className="text-xs mt-1 text-red-600 uppercase">By: {request.cancelledBy}</p>
+                        </div>
+                    )}
+
                     <div className="bg-white border rounded-xl p-4 shadow-sm">
                         <h2 className="font-semibold text-gray-800 mb-2">{request.category}</h2>
                         <p className="text-gray-600 text-sm mb-4">{request.problemDescription}</p>
@@ -180,9 +254,11 @@ const RequestDetails = () => {
                             </div>
                         </div>
                     ) : (
-                        <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-xl text-yellow-800 text-center">
-                            Waiting for a provider to accept...
-                        </div>
+                        request.status !== 'cancelled' && (
+                            <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-xl text-yellow-800 text-center">
+                                Waiting for a provider to accept...
+                            </div>
+                        )
                     )}
                 </div>
             </div>

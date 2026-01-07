@@ -9,13 +9,25 @@ export const AuthProvider = ({ children }) => {
 
     useEffect(() => {
         const checkLoggedIn = async () => {
-            const token = localStorage.getItem('token');
-            const savedUser = localStorage.getItem('user');
-
-            if (token && savedUser) {
-                setUser(JSON.parse(savedUser));
+            const token = sessionStorage.getItem('token');
+            if (!token) {
+                setLoading(false);
+                return;
             }
-            setLoading(false);
+
+            // Verify token with backend
+            try {
+                api.defaults.headers.common['x-auth-token'] = token;
+                const res = await api.get('/auth/user'); // Endpoint to get current user
+                setUser(res.data);
+            } catch (err) {
+                console.error("Token verification failed:", err);
+                sessionStorage.removeItem('token');
+                sessionStorage.removeItem('user');
+                setUser(null);
+            } finally {
+                setLoading(false);
+            }
         };
         checkLoggedIn();
     }, []);
@@ -23,8 +35,8 @@ export const AuthProvider = ({ children }) => {
     const login = async (email, password, role) => {
         try {
             const res = await api.post('/auth/login', { email, password, role });
-            localStorage.setItem('token', res.data.token);
-            localStorage.setItem('user', JSON.stringify(res.data.user));
+            sessionStorage.setItem('token', res.data.token);
+            sessionStorage.setItem('user', JSON.stringify(res.data.user));
             setUser(res.data.user);
             return { success: true };
         } catch (err) {
@@ -35,8 +47,8 @@ export const AuthProvider = ({ children }) => {
     const registerClient = async (data) => {
         try {
             const res = await api.post('/auth/register-client', data);
-            localStorage.setItem('token', res.data.token);
-            localStorage.setItem('user', JSON.stringify(res.data.user)); // Optional: create user in specific structure
+            sessionStorage.setItem('token', res.data.token);
+            sessionStorage.setItem('user', JSON.stringify(res.data.user)); // Optional: create user in specific structure
             setUser(res.data.user);
             return { success: true };
         } catch (err) {
@@ -47,8 +59,8 @@ export const AuthProvider = ({ children }) => {
     const registerProvider = async (data) => {
         try {
             const res = await api.post('/auth/register-provider', data);
-            localStorage.setItem('token', res.data.token);
-            localStorage.setItem('user', JSON.stringify(res.data.user));
+            sessionStorage.setItem('token', res.data.token);
+            sessionStorage.setItem('user', JSON.stringify(res.data.user));
             setUser(res.data.user);
             return { success: true };
         } catch (err) {
@@ -57,8 +69,8 @@ export const AuthProvider = ({ children }) => {
     };
 
     const logout = () => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('user');
         setUser(null);
     };
 
