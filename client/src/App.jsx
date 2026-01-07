@@ -9,10 +9,13 @@ import ClientHome from './pages/ClientHome';
 import CreateRequest from './pages/CreateRequest';
 import ProviderDashboard from './pages/ProviderDashboard';
 import RequestDetails from './pages/RequestDetails';
+import ClientProfile from './pages/ClientProfile';
 import AdminDashboard from './pages/AdminDashboard';
 import Transactions from './pages/Transactions';
 import PrivateRoute from './components/PrivateRoute';
 import AdminLayout from './components/layouts/AdminLayout';
+
+import ResetPassword from './pages/ResetPassword';
 
 function App() {
   return (
@@ -23,6 +26,7 @@ function App() {
           <Route path="/" element={<Login />} />
           <Route path="/register-client" element={<RegisterClient />} />
           <Route path="/register-provider" element={<RegisterProvider />} />
+          <Route path="/reset-password/:token" element={<ResetPassword />} />
 
           {/* Admin Routes */}
           <Route path="/admin/login" element={<AdminLogin />} />
@@ -65,6 +69,14 @@ function App() {
             element={
               <PrivateRoute role="client">
                 <Transactions />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/client/profile"
+            element={
+              <PrivateRoute role="client">
+                <ClientProfile />
               </PrivateRoute>
             }
           />

@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api';
-import { Home, Search, User, Zap, Droplet, Hammer, PaintBucket, Wind, Wrench, MapPin } from 'lucide-react';
+import { Home, Search, User, Zap, Droplet, Hammer, PaintBucket, Wind, Wrench, MapPin, XCircle } from 'lucide-react';
 
 const ClientHome = () => {
     const { user } = useAuth();
     const [requests, setRequests] = useState([]);
+    const [searchQuery, setSearchQuery] = useState('');
 
     const serviceCategories = [
         { id: 1, name: 'Electrician', icon: Zap, color: 'bg-yellow-500' },
@@ -16,6 +17,10 @@ const ClientHome = () => {
         { id: 5, name: 'AC Repair', icon: Wind, color: 'bg-cyan-500' },
         { id: 6, name: 'Other', icon: Wrench, color: 'bg-gray-500' }
     ];
+
+    const filteredCategories = serviceCategories.filter(service =>
+        service.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
     useEffect(() => {
         const fetchRequests = async () => {
@@ -29,6 +34,16 @@ const ClientHome = () => {
         fetchRequests();
     }, []);
 
+    const handleArchive = async (id) => {
+        if (!window.confirm('Archive this request? It will be hidden from your list.')) return;
+        try {
+            await api.put(`/requests/${id}/archive`);
+            setRequests(prev => prev.filter(req => req._id !== id));
+        } catch (err) {
+            alert('Failed to archive');
+        }
+    };
+
     return (
         <div className="min-h-screen bg-gray-50 pb-20">
             <div className="max-w-md mx-auto bg-white min-h-screen shadow-xl">
@@ -39,8 +54,13 @@ const ClientHome = () => {
                             <h1 className="text-2xl font-bold">Hi, {user?.name.split(' ')[0]}! 👋</h1>
                             <p className="text-blue-100 text-sm">What service do you need today?</p>
                         </div>
-                        <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-                            <User size={24} />
+                        <div className="flex items-center gap-3">
+                            <div className="bg-white/20 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 backdrop-blur-sm">
+                                <span className="font-serif">₹</span> {user?.walletBalance || 0}
+                            </div>
+                            <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                                <User size={20} />
+                            </div>
                         </div>
                     </div>
 
@@ -50,6 +70,8 @@ const ClientHome = () => {
                             type="text"
                             placeholder="Search for services..."
                             className="flex-1 outline-none text-gray-700"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
                         />
                     </div>
                 </div>
@@ -58,21 +80,27 @@ const ClientHome = () => {
                 <div className="p-6">
                     <h2 className="text-lg font-semibold text-gray-800 mb-4">Popular Services</h2>
                     <div className="grid grid-cols-3 gap-4">
-                        {serviceCategories.map(service => {
-                            const Icon = service.icon;
-                            return (
-                                <Link
-                                    key={service.id}
-                                    to={`/client/create-request?category=${service.name}`}
-                                    className="bg-white rounded-2xl p-4 shadow-md hover:shadow-xl transition-all transform hover:-translate-y-1 flex flex-col items-center gap-3"
-                                >
-                                    <div className={`${service.color} w-14 h-14 rounded-xl flex items-center justify-center text-white`}>
-                                        <Icon size={28} />
-                                    </div>
-                                    <span className="text-xs font-medium text-gray-700 text-center">{service.name}</span>
-                                </Link>
-                            );
-                        })}
+                        {filteredCategories.length === 0 ? (
+                            <div className="col-span-3 text-center text-gray-500 py-4">
+                                No services found.
+                            </div>
+                        ) : (
+                            filteredCategories.map(service => {
+                                const Icon = service.icon;
+                                return (
+                                    <Link
+                                        key={service.id}
+                                        to={`/client/create-request?category=${service.name}`}
+                                        className="bg-white rounded-2xl p-4 shadow-md hover:shadow-xl transition-all transform hover:-translate-y-1 flex flex-col items-center gap-3"
+                                    >
+                                        <div className={`${service.color} w-14 h-14 rounded-xl flex items-center justify-center text-white`}>
+                                            <Icon size={28} />
+                                        </div>
+                                        <span className="text-xs font-medium text-gray-700 text-center">{service.name}</span>
+                                    </Link>
+                                );
+                            })
+                        )}
                     </div>
 
                     {/* Recent Requests */}
@@ -95,8 +123,8 @@ const ClientHome = () => {
                                                 </div>
                                             </div>
                                             <span className={`text-xs px-3 py-1 rounded-full font-medium ${req.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                                                    req.status === 'accepted' ? 'bg-blue-100 text-blue-700' :
-                                                        req.status === 'confirmed' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                                                req.status === 'accepted' ? 'bg-blue-100 text-blue-700' :
+                                                    req.status === 'confirmed' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
                                                 }`}>
                                                 {req.status.charAt(0).toUpperCase() + req.status.slice(1)}
                                             </span>
@@ -107,7 +135,14 @@ const ClientHome = () => {
                                                 <MapPin size={14} />
                                                 <span>{req.location}</span>
                                             </div>
-                                            <Link to={`/client/request/${req._id}`} className="text-indigo-600 text-sm font-medium">View Details</Link>
+                                            <div className="flex items-center gap-3">
+                                                {(req.status === 'completed' || req.status === 'cancelled') && (
+                                                    <button onClick={() => handleArchive(req._id)} className="text-gray-400 hover:text-red-500" title="Archive">
+                                                        <XCircle size={18} />
+                                                    </button>
+                                                )}
+                                                <Link to={`/client/requests/${req._id}`} className="text-indigo-600 text-sm font-medium">View Details</Link>
+                                            </div>
                                         </div>
                                     </div>
                                 ))}
@@ -123,10 +158,10 @@ const ClientHome = () => {
                             <Home size={24} />
                             <span className="text-xs font-medium">Home</span>
                         </button>
-                        <button className="flex flex-col items-center gap-1 text-gray-400">
+                        <Link to="/client/profile" className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition">
                             <User size={24} />
                             <span className="text-xs">Profile</span>
-                        </button>
+                        </Link>
                     </div>
                 </div>
             </div>

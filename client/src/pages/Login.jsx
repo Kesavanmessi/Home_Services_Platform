@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
+import api from '../api';
 import { User, Lock, Briefcase } from 'lucide-react';
 
 const Login = () => {
@@ -21,6 +22,65 @@ const Login = () => {
             setError(res.message);
         }
     };
+
+    // Forgot Pass State
+    const [showForgot, setShowForgot] = useState(false);
+    const [forgotEmail, setForgotEmail] = useState('');
+
+    const handleForgot = async (e) => {
+        e.preventDefault();
+        try {
+            await api.post('/auth/forgot-password', { email: forgotEmail });
+            alert('Password reset link sent to your email.');
+            setShowForgot(false);
+        } catch (err) {
+            console.error('Forgot Password Error:', err);
+            alert(err.response?.data?.message || 'Failed to send email. Check console for details.');
+        }
+    };
+
+    if (showForgot) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+                <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
+                    <h2 className="text-2xl font-bold text-center mb-6">Reset Password</h2>
+                    <p className="text-center text-gray-500 mb-6">Enter your email to receive a reset link.</p>
+                    <form onSubmit={handleForgot} className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                            <input
+                                type="email"
+                                required
+                                className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none"
+                                placeholder="john@example.com"
+                                value={forgotEmail}
+                                onChange={e => setForgotEmail(e.target.value)}
+                            />
+                        </div>
+                        <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition">
+                            Send Reset Link
+                        </button>
+                        <button type="button" onClick={() => setShowForgot(false)} className="w-full text-indigo-600 font-medium py-2">
+                            Back to Login
+                        </button>
+                    </form>
+
+                    <div className="mt-6 border-t pt-4 text-center">
+                        <p className="text-gray-500 text-sm mb-2">Already have a code?</p>
+                        <button
+                            onClick={() => {
+                                const code = prompt('Enter your reset code:');
+                                if (code) navigate(`/reset-password/${code}`);
+                            }}
+                            className="text-indigo-600 font-bold hover:underline"
+                        >
+                            Enter Code Here
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -88,6 +148,12 @@ const Login = () => {
                     >
                         Login
                     </button>
+
+                    <div className="text-center mt-4">
+                        <button type="button" onClick={() => setShowForgot(true)} className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">
+                            Forgot Password?
+                        </button>
+                    </div>
                 </form>
 
                 <p className="text-center text-gray-500 text-sm mt-6">

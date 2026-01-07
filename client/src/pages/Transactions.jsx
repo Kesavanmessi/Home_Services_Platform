@@ -38,16 +38,18 @@ const TransactionsProxy = () => {
                             {transactions.map(t => (
                                 <div key={t._id} className="bg-white border p-4 rounded-xl flex justify-between items-center shadow-sm">
                                     <div className="flex items-center gap-3">
-                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${t.type === 'acceptance_fee' || t.type === 'confirmation_fee' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'
+                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${t.type === 'credit' || t.type === 'refund' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
                                             }`}>
-                                            {t.type === 'acceptance_fee' || t.type === 'confirmation_fee' ? <ArrowUpRight size={20} /> : <ArrowDownLeft size={20} />}
+                                            {t.type === 'credit' || t.type === 'refund' ? <ArrowDownLeft size={20} /> : <ArrowUpRight size={20} />}
                                         </div>
                                         <div>
-                                            <p className="font-semibold text-gray-800 capitalize">{t.type.replace('_', ' ')}</p>
-                                            <p className="text-xs text-gray-400">{new Date(t.createdAt).toLocaleDateString()}</p>
+                                            <p className="font-semibold text-gray-800 capitalize">{t.type === 'credit' ? 'Money Added' : t.type.replace('_', ' ')}</p>
+                                            <p className="text-xs text-gray-400">{new Date(t.createdAt).toLocaleDateString()} • {new Date(t.createdAt).toLocaleTimeString()}</p>
                                         </div>
                                     </div>
-                                    <span className="font-bold text-red-600">- ₹{t.amount}</span>
+                                    <span className={`font-bold ${t.type === 'credit' || t.type === 'refund' ? 'text-green-600' : 'text-red-600'}`}>
+                                        {t.type === 'credit' || t.type === 'refund' ? '+' : '-'} ₹{t.amount}
+                                    </span>
                                 </div>
                             ))}
                         </div>
