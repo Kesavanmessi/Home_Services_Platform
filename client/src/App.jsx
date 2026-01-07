@@ -12,8 +12,10 @@ import RequestDetails from './pages/RequestDetails';
 import ClientProfile from './pages/ClientProfile';
 import AdminDashboard from './pages/AdminDashboard';
 import Transactions from './pages/Transactions';
+import ProviderProfile from './pages/ProviderProfile';
 import PrivateRoute from './components/PrivateRoute';
 import AdminLayout from './components/layouts/AdminLayout';
+import TermsAndConditions from './pages/TermsAndConditions';
 
 import ResetPassword from './pages/ResetPassword';
 
@@ -26,7 +28,9 @@ function App() {
           <Route path="/" element={<Login />} />
           <Route path="/register-client" element={<RegisterClient />} />
           <Route path="/register-provider" element={<RegisterProvider />} />
+          <Route path="/register-provider" element={<RegisterProvider />} />
           <Route path="/reset-password/:token" element={<ResetPassword />} />
+          <Route path="/terms" element={<TermsAndConditions />} />
 
           {/* Admin Routes */}
           <Route path="/admin/login" element={<AdminLogin />} />
@@ -95,6 +99,14 @@ function App() {
             element={
               <PrivateRoute role="provider">
                 <Transactions />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/provider/profile"
+            element={
+              <PrivateRoute role="provider">
+                <ProviderProfile />
               </PrivateRoute>
             }
           />

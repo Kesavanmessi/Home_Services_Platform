@@ -23,6 +23,28 @@ const sendEmail = async (to, subject, text) => {
     }
 };
 
+// Send General Notification
+const sendNotificationEmail = async (to, subject, message) => {
+    try {
+        const mailOptions = {
+            from: '"Home Services" <homeservice1811@gmail.com>', // Using the same sender as sendEmail
+            to,
+            subject: subject,
+            html: `<div style="font-family: sans-serif; padding: 20px;">
+                    <h2 style="color: #4F46E5;">Home Services Update</h2>
+                    <p style="font-size: 16px;">${message}</p>
+                    <hr/>
+                    <p style="font-size: 12px; color: #888;">This is an automated message.</p>
+                   </div>`
+        };
+        await transporter.sendMail(mailOptions);
+        console.log(`Notification email sent to ${to}`);
+    } catch (err) {
+        console.error("Email Error:", err);
+        throw err; // Re-throw to handle in caller
+    }
+};
+
 module.exports = {
     sendWelcomeEmail: (email, name) => sendEmail(email, 'Welcome to Home Services', `Hi ${name},\n\nWelcome to our platform! We are excited to have you.`),
     sendPasswordReset: (email, token) => sendEmail(email, 'Password Reset', `Your reset code is: ${token}\n\nOr click here: http://localhost:5173/reset-password/${token}`),

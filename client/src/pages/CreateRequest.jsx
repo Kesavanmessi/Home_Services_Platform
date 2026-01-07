@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api';
-import { MapPin, Zap, Droplet, Hammer, PaintBucket, Wind, Wrench, Search, Navigation, Calendar } from 'lucide-react';
+import { MapPin, Zap, Droplet, Hammer, PaintBucket, Wind, Wrench, Search, Navigation, Calendar, Clock } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -57,6 +57,42 @@ const CreateRequest = () => {
     const [position, setPosition] = useState(null); // { lat, lng }
     const [scheduledDate, setScheduledDate] = useState('');
     const [stats, setStats] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [isLocating, setIsLocating] = useState(false);
+
+    // Get current location on mount
+    useEffect(() => {
+        handleGetCurrentLocation();
+    }, []);
+
+    const handleGetCurrentLocation = () => {
+        if (navigator.geolocation) {
+            setIsLocating(true);
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                const { latitude, longitude } = pos.coords;
+                const newPos = { lat: latitude, lng: longitude };
+                setPosition(newPos);
+
+                try {
+                    // Reverse Geocoding for current location
+                    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+                    const data = await res.json();
+                    if (data.display_name) {
+                        setLocation(data.display_name);
+                    }
+                } catch (err) {
+                    console.error("Geocoding error:", err);
+                } finally {
+                    setIsLocating(false);
+                }
+            }, (err) => {
+                console.error(err);
+                setIsLocating(false);
+                alert("Could not pull location. Please check browser permissions.");
+            });
+        }
+    };
 
     // Fetch stats when category or position changes
     useEffect(() => {
@@ -67,7 +103,7 @@ const CreateRequest = () => {
 
     const fetchStats = async () => {
         try {
-            const res = await api.get('/provider/stats', {
+            const res = await api.get('/requests/provider-stats', {
                 params: {
                     category: selectedCategory,
                     lat: position.lat,
@@ -80,8 +116,26 @@ const CreateRequest = () => {
         }
     };
 
+    const handleSearchLocation = async () => {
+        if (!searchQuery) return;
+        try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`);
+            const data = await res.json();
+            if (data && data.length > 0) {
+                const { lat, lon, display_name } = data[0];
+                const newPos = { lat: parseFloat(lat), lng: parseFloat(lon) };
+                setPosition(newPos);
+                setLocation(display_name); // Auto-fill address
+            } else {
+                alert("Location not found");
+            }
+        } catch (err) {
+            alert("Search failed");
+        }
+    };
+
     const handleSubmit = async () => {
-        if (!problemDescription || !location || !position || !scheduledDate) return alert('Please fill all fields, select location, and pick a date/time.');
+        if (!problemDescription || !location || !position) return alert('Please fill all fields and select location.');
         setLoading(true);
         try {
             await api.post('/requests', {
@@ -89,7 +143,7 @@ const CreateRequest = () => {
                 problemDescription,
                 location,
                 coordinates: position,
-                scheduledDate
+                scheduledDate: new Date().toISOString() // Force ASAP
             });
             navigate('/client/home');
         } catch (err) {
@@ -143,6 +197,13 @@ const CreateRequest = () => {
 
                     {/* Description */}
                     <div>
+                        <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg mb-4 flex items-start gap-2">
+                            <Clock className="text-blue-600 shrink-0 mt-0.5" size={16} />
+                            <p className="text-xs text-blue-800">
+                                <strong>Immediate Service Only:</strong> To protect our providers' livelihoods, we only support "On-Demand" bookings. Your request will be broadcast to providers available <strong>right now</strong>.
+                            </p>
+                        </div>
+
                         <label className="block text-sm font-medium text-gray-700 mb-2">Describe Your Problem</label>
                         <textarea
                             className="w-full border-2 border-gray-200 rounded-xl p-4 outline-none focus:border-indigo-600 transition-colors"
@@ -222,6 +283,8 @@ const CreateRequest = () => {
                         </div>
                     </div>
 
+
+
                     <button
                         onClick={handleSubmit}
                         disabled={loading}
@@ -230,37 +293,44 @@ const CreateRequest = () => {
                         {loading ? 'Posting...' : 'Post Request (Free)'}
                     </button>
 
-                    {/* Provider Stats Display */}
-                    {stats && (
-                        <div className="bg-white border rounded-xl p-4 shadow-sm mt-4">
-                            <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
-                                <Search size={16} /> Market Report: {selectedCategory}
-                            </h3>
-                            <div className="grid grid-cols-2 gap-3 text-sm">
-                                <div className="bg-green-50 p-3 rounded-lg text-center">
-                                    <p className="text-2xl font-bold text-green-600">{stats.availableNow}</p>
-                                    <p className="text-gray-600 text-xs">Available Now</p>
-                                </div>
-                                <div className="bg-orange-50 p-3 rounded-lg text-center">
-                                    <p className="text-2xl font-bold text-orange-600">{stats.busy}</p>
-                                    <p className="text-gray-600 text-xs">Busy (On Job)</p>
-                                </div>
-                                <div className="bg-gray-50 p-3 rounded-lg text-center">
-                                    <p className="text-2xl font-bold text-gray-600">{stats.offline}</p>
-                                    <p className="text-gray-600 text-xs">Offline</p>
-                                </div>
-                                <div className="bg-blue-50 p-3 rounded-lg text-center">
-                                    <p className="text-2xl font-bold text-blue-600">{stats.total}</p>
-                                    <p className="text-gray-600 text-xs">Total Nearby</p>
-                                </div>
+                    {/* Provider Stats Display - Always Visible Container */}
+                    <div className="bg-white border rounded-xl p-4 shadow-sm mt-4">
+                        <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
+                            <Search size={16} /> Market Report: {selectedCategory}
+                        </h3>
+
+                        {!stats ? (
+                            <div className="text-center py-6 text-gray-400 bg-gray-50 rounded-lg border border-dashed">
+                                <p>Select a location on the map to see provider availability.</p>
                             </div>
-                            {stats.offline > 0 && stats.availableNow === 0 && (
-                                <p className="text-xs text-gray-500 mt-3 text-center italic">
-                                    Note: Offline providers may receive your request but might not accept immediately.
-                                </p>
-                            )}
-                        </div>
-                    )}
+                        ) : (
+                            <>
+                                <div className="grid grid-cols-2 gap-3 text-sm">
+                                    <div className="bg-green-50 p-3 rounded-lg text-center">
+                                        <p className="text-2xl font-bold text-green-600">{stats.availableNow}</p>
+                                        <p className="text-gray-600 text-xs">Available Now</p>
+                                    </div>
+                                    <div className="bg-orange-50 p-3 rounded-lg text-center">
+                                        <p className="text-2xl font-bold text-orange-600">{stats.busy}</p>
+                                        <p className="text-gray-600 text-xs">Busy (On Job)</p>
+                                    </div>
+                                    <div className="bg-gray-50 p-3 rounded-lg text-center">
+                                        <p className="text-2xl font-bold text-gray-600">{stats.offline}</p>
+                                        <p className="text-gray-600 text-xs">Offline</p>
+                                    </div>
+                                    <div className="bg-blue-50 p-3 rounded-lg text-center">
+                                        <p className="text-2xl font-bold text-blue-600">{stats.total}</p>
+                                        <p className="text-gray-600 text-xs">Total Nearby</p>
+                                    </div>
+                                </div>
+                                {stats.offline > 0 && stats.availableNow === 0 && (
+                                    <p className="text-xs text-gray-500 mt-3 text-center italic">
+                                        Note: Offline providers may receive your request but might not accept immediately.
+                                    </p>
+                                )}
+                            </>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
