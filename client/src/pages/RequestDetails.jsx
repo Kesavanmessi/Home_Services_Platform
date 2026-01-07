@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
-import { MapPin, Phone, CheckCircle, Star, User } from 'lucide-react';
+import { MapPin, Phone, CheckCircle, Star, User, Calendar } from 'lucide-react';
 
 const RequestDetails = () => {
     const { user } = useAuth(); // Need user for wallet
@@ -148,6 +148,12 @@ const RequestDetails = () => {
 
                     <div className="bg-white border rounded-xl p-4 shadow-sm">
                         <h2 className="font-semibold text-gray-800 mb-2">{request.category}</h2>
+                        {request.scheduledDate && (
+                            <div className="flex items-center gap-2 mb-2 bg-indigo-50 text-indigo-800 p-2 rounded-lg text-sm font-medium">
+                                <Calendar size={16} />
+                                <span>Scheduled for: {new Date(request.scheduledDate).toLocaleString()}</span>
+                            </div>
+                        )}
                         <p className="text-gray-600 text-sm mb-4">{request.problemDescription}</p>
                         <div className="flex items-center gap-2 text-gray-500 text-xs">
                             <MapPin size={14} />

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api';
-import { Home, Search, User, Zap, Droplet, Hammer, PaintBucket, Wind, Wrench, MapPin } from 'lucide-react';
+import { Home, Search, User, Zap, Droplet, Hammer, PaintBucket, Wind, Wrench, MapPin, XCircle } from 'lucide-react';
 
 const ClientHome = () => {
     const { user } = useAuth();
@@ -33,6 +33,16 @@ const ClientHome = () => {
         };
         fetchRequests();
     }, []);
+
+    const handleArchive = async (id) => {
+        if (!window.confirm('Archive this request? It will be hidden from your list.')) return;
+        try {
+            await api.put(`/requests/${id}/archive`);
+            setRequests(prev => prev.filter(req => req._id !== id));
+        } catch (err) {
+            alert('Failed to archive');
+        }
+    };
 
     return (
         <div className="min-h-screen bg-gray-50 pb-20">
@@ -125,7 +135,14 @@ const ClientHome = () => {
                                                 <MapPin size={14} />
                                                 <span>{req.location}</span>
                                             </div>
-                                            <Link to={`/client/request/${req._id}`} className="text-indigo-600 text-sm font-medium">View Details</Link>
+                                            <div className="flex items-center gap-3">
+                                                {(req.status === 'completed' || req.status === 'cancelled') && (
+                                                    <button onClick={() => handleArchive(req._id)} className="text-gray-400 hover:text-red-500" title="Archive">
+                                                        <XCircle size={18} />
+                                                    </button>
+                                                )}
+                                                <Link to={`/client/requests/${req._id}`} className="text-indigo-600 text-sm font-medium">View Details</Link>
+                                            </div>
                                         </div>
                                     </div>
                                 ))}

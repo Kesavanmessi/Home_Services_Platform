@@ -15,6 +15,8 @@ import Transactions from './pages/Transactions';
 import PrivateRoute from './components/PrivateRoute';
 import AdminLayout from './components/layouts/AdminLayout';
 
+import ResetPassword from './pages/ResetPassword';
+
 function App() {
   return (
     <AuthProvider>
@@ -24,6 +26,7 @@ function App() {
           <Route path="/" element={<Login />} />
           <Route path="/register-client" element={<RegisterClient />} />
           <Route path="/register-provider" element={<RegisterProvider />} />
+          <Route path="/reset-password/:token" element={<ResetPassword />} />
 
           {/* Admin Routes */}
           <Route path="/admin/login" element={<AdminLogin />} />

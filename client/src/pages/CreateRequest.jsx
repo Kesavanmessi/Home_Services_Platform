@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api';
-import { MapPin, Zap, Droplet, Hammer, PaintBucket, Wind, Wrench, Search, Navigation } from 'lucide-react';
+import { MapPin, Zap, Droplet, Hammer, PaintBucket, Wind, Wrench, Search, Navigation, Calendar } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -55,70 +55,41 @@ const CreateRequest = () => {
     const [problemDescription, setProblemDescription] = useState('');
     const [location, setLocation] = useState('');
     const [position, setPosition] = useState(null); // { lat, lng }
-    const [loading, setLoading] = useState(false);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [isLocating, setIsLocating] = useState(false);
+    const [scheduledDate, setScheduledDate] = useState('');
+    const [stats, setStats] = useState(null);
 
-    // Get current location on mount
+    // Fetch stats when category or position changes
     useEffect(() => {
-        handleGetCurrentLocation();
-    }, []);
-
-    const handleGetCurrentLocation = () => {
-        if (navigator.geolocation) {
-            setIsLocating(true);
-            navigator.geolocation.getCurrentPosition(async (pos) => {
-                const { latitude, longitude } = pos.coords;
-                const newPos = { lat: latitude, lng: longitude };
-                setPosition(newPos);
-
-                try {
-                    // Reverse Geocoding for current location
-                    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
-                    const data = await res.json();
-                    if (data.display_name) {
-                        setLocation(data.display_name);
-                    }
-                } catch (err) {
-                    console.error("Geocoding error:", err);
-                } finally {
-                    setIsLocating(false);
-                }
-            }, (err) => {
-                console.error(err);
-                setIsLocating(false);
-                alert("Could not pull location. Please check browser permissions.");
-            });
+        if (selectedCategory && position) {
+            fetchStats();
         }
-    };
+    }, [selectedCategory, position]);
 
-    const handleSearchLocation = async () => {
-        if (!searchQuery) return;
+    const fetchStats = async () => {
         try {
-            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`);
-            const data = await res.json();
-            if (data && data.length > 0) {
-                const { lat, lon, display_name } = data[0];
-                const newPos = { lat: parseFloat(lat), lng: parseFloat(lon) };
-                setPosition(newPos);
-                setLocation(display_name); // Auto-fill address
-            } else {
-                alert("Location not found");
-            }
+            const res = await api.get('/provider/stats', {
+                params: {
+                    category: selectedCategory,
+                    lat: position.lat,
+                    lng: position.lng
+                }
+            });
+            setStats(res.data);
         } catch (err) {
-            alert("Search failed");
+            console.error("Failed to fetch stats", err);
         }
     };
 
     const handleSubmit = async () => {
-        if (!problemDescription || !location || !position) return alert('Please fill all fields and select location on map');
+        if (!problemDescription || !location || !position || !scheduledDate) return alert('Please fill all fields, select location, and pick a date/time.');
         setLoading(true);
         try {
             await api.post('/requests', {
                 category: selectedCategory,
                 problemDescription,
                 location,
-                coordinates: position
+                coordinates: position,
+                scheduledDate
             });
             navigate('/client/home');
         } catch (err) {
@@ -258,6 +229,38 @@ const CreateRequest = () => {
                     >
                         {loading ? 'Posting...' : 'Post Request (Free)'}
                     </button>
+
+                    {/* Provider Stats Display */}
+                    {stats && (
+                        <div className="bg-white border rounded-xl p-4 shadow-sm mt-4">
+                            <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
+                                <Search size={16} /> Market Report: {selectedCategory}
+                            </h3>
+                            <div className="grid grid-cols-2 gap-3 text-sm">
+                                <div className="bg-green-50 p-3 rounded-lg text-center">
+                                    <p className="text-2xl font-bold text-green-600">{stats.availableNow}</p>
+                                    <p className="text-gray-600 text-xs">Available Now</p>
+                                </div>
+                                <div className="bg-orange-50 p-3 rounded-lg text-center">
+                                    <p className="text-2xl font-bold text-orange-600">{stats.busy}</p>
+                                    <p className="text-gray-600 text-xs">Busy (On Job)</p>
+                                </div>
+                                <div className="bg-gray-50 p-3 rounded-lg text-center">
+                                    <p className="text-2xl font-bold text-gray-600">{stats.offline}</p>
+                                    <p className="text-gray-600 text-xs">Offline</p>
+                                </div>
+                                <div className="bg-blue-50 p-3 rounded-lg text-center">
+                                    <p className="text-2xl font-bold text-blue-600">{stats.total}</p>
+                                    <p className="text-gray-600 text-xs">Total Nearby</p>
+                                </div>
+                            </div>
+                            {stats.offline > 0 && stats.availableNow === 0 && (
+                                <p className="text-xs text-gray-500 mt-3 text-center italic">
+                                    Note: Offline providers may receive your request but might not accept immediately.
+                                </p>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

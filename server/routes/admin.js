@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
-const auth = require('../middleware/auth');
+
 const ServiceProvider = require('../models/ServiceProvider');
 const Review = require('../models/Review');
 
