@@ -11,7 +11,7 @@ const serviceRequestSchema = new mongoose.Schema({
         lng: { type: Number }
     },
     scheduledDate: { type: Date, required: true }, // When the service is needed
-    status: { type: String, enum: ['open', 'accepted', 'confirmed', 'completed', 'cancelled', 'expired'], default: 'open' },
+    status: { type: String, enum: ['open', 'accepted', 'confirmed', 'in_progress', 'completed', 'cancelled', 'expired'], default: 'open' },
     acceptanceFeePaid: { type: Boolean, default: false }, // Fee paid by provider to accept
     confirmationFeePaid: { type: Boolean, default: false }, // Fee paid by client to confirm
     cancellationReason: { type: String },
@@ -26,5 +26,8 @@ const serviceRequestSchema = new mongoose.Schema({
     acceptedAt: { type: Date },
     createdAt: { type: Date, default: Date.now }
 });
+
+// GeoJSON Index
+serviceRequestSchema.index({ coordinates: '2dsphere' });
 
 module.exports = mongoose.model('ServiceRequest', serviceRequestSchema);

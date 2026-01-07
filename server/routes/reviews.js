@@ -5,43 +5,55 @@ const Review = require('../models/Review');
 const ServiceProvider = require('../models/ServiceProvider');
 const ServiceRequest = require('../models/ServiceRequest');
 
-// Create Review
+const User = require('../models/User'); // Import User model
+
+// Create Review (Generic)
 router.post('/', auth, async (req, res) => {
-    if (req.user.role !== 'client') return res.status(403).json({ message: 'Only clients can review' });
-
     try {
-        const { requestId, rating, comment } = req.body;
+        const { rating, comment, providerId, clientId, requestId } = req.body;
 
-        // Check if request exists and is completed/confirmed
-        const request = await ServiceRequest.findById(requestId);
-        if (!request) return res.status(404).json({ message: 'Request not found' });
+        if (!requestId) return res.status(400).json({ message: 'Request ID is required' });
 
-        // Ensure user is the owner
-        if (request.client.toString() !== req.user.id) return res.status(403).json({ message: 'Not authorized' });
-
-        // Check if already reviewed (optional, skip for simplicity)
-
-        const review = new Review({
-            request: requestId,
-            client: req.user.id,
-            provider: request.provider,
+        const newReview = new Review({
+            reviewer: req.user.id,
+            reviewerModel: req.user.role === 'client' ? 'User' : 'ServiceProvider',
             rating,
-            comment
+            comment,
+            request: requestId
         });
 
-        await review.save();
+        if (req.user.role === 'client') {
+            // Client reviewing Provider
+            if (!providerId) return res.status(400).json({ message: 'Provider ID required' });
+            newReview.provider = providerId;
+        } else {
+            // Provider reviewing Client
+            if (!clientId) return res.status(400).json({ message: 'Client ID required' });
+            newReview.client = clientId;
+        }
 
-        // Update Provider Rating
-        // Simple Average
-        const reviews = await Review.find({ provider: request.provider });
-        const avgRating = reviews.reduce((acc, curr) => acc + curr.rating, 0) / reviews.length;
+        await newReview.save();
 
-        await ServiceProvider.findByIdAndUpdate(request.provider, {
-            rating: avgRating.toFixed(1)
-        });
+        // Update Average Rating
+        if (newReview.provider) {
+            const provider = await ServiceProvider.findById(newReview.provider);
+            const reviews = await Review.find({ provider: newReview.provider });
+            const avg = reviews.reduce((acc, item) => acc + item.rating, 0) / reviews.length;
+            provider.rating = avg;
+            await provider.save();
+        }
 
-        res.status(201).json(review);
+        if (newReview.client) {
+            const client = await User.findById(newReview.client);
+            const reviews = await Review.find({ client: newReview.client });
+            const avg = reviews.reduce((acc, item) => acc + item.rating, 0) / reviews.length;
+            client.rating = avg;
+            await client.save();
+        }
+
+        res.status(201).json(newReview);
     } catch (err) {
+        console.error(err);
         res.status(500).json({ message: 'Server Error', error: err.message });
     }
 });

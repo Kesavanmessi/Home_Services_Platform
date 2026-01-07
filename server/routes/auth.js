@@ -70,8 +70,14 @@ router.post('/login', async (req, res) => {
         } else if (role === 'provider') {
             user = await ServiceProvider.findOne({ email });
         } else if (role === 'admin') {
-            // Simple Hardcoded Admin for MVP
-            if (email === 'admin@example.com' && password === 'admin123') {
+            const adminEmail = process.env.ADMIN_EMAIL;
+            const adminSecret = process.env.ADMIN_SECRET; // In prod use a hash!
+
+            if (!adminEmail || !adminSecret) {
+                return res.status(500).json({ message: 'Admin login not configured' });
+            }
+
+            if (email === adminEmail && password === adminSecret) {
                 const token = jwt.sign({ id: 'admin_id', role: 'admin' }, process.env.JWT_SECRET, { expiresIn: '1d' });
                 return res.json({
                     token,

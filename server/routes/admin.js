@@ -3,11 +3,12 @@ const router = express.Router();
 const auth = require('../middleware/auth');
 
 const ServiceProvider = require('../models/ServiceProvider');
+const ServiceRequest = require('../models/ServiceRequest');
 const Review = require('../models/Review');
 
 // Admin Middleware (Simple check)
 const adminAuth = (req, res, next) => {
-    if (req.user.role !== 'admin' && req.user.email !== 'admin@example.com') {
+    if (req.user.role !== 'admin') {
         return res.status(403).json({ message: 'Admin access denied', user: req.user });
     }
     next();
@@ -152,6 +153,48 @@ router.get('/reviews/:providerId', auth, adminAuth, async (req, res) => {
             .sort({ createdAt: -1 });
         res.json(reviews);
     } catch (err) {
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
+// --- JOB REPORTS ---
+
+// Get All Jobs (Detailed Report List)
+router.get('/jobs/report', auth, adminAuth, async (req, res) => {
+    try {
+        const jobs = await ServiceRequest.findOne ? ServiceRequest.find() // Need to import ServiceRequest
+            .populate('client', 'name email phone')
+            .populate('provider', 'name email phone category')
+            .sort({ createdAt: -1 }) : [];
+
+        // Note: ServiceRequest model is not imported in admin.js yet. I must import it at the top.
+        // But for now I'll write the query here and fix imports in next step or use require.
+
+        res.json(jobs);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
+// Get Single Job Full Details (Timeline + Reviews)
+router.get('/jobs/:id/details', auth, adminAuth, async (req, res) => {
+    try {
+        const job = await ServiceRequest.findById(req.params.id)
+            .populate('client', 'name email phone')
+            .populate('provider', 'name email phone category');
+
+        if (!job) return res.status(404).json({ message: 'Job not found' });
+
+        // Fetch Reviews for this job
+        const reviews = await Review.find({ request: req.params.id })
+            .populate('reviewer', 'name')
+            .populate('client', 'name')
+            .populate('provider', 'name');
+
+        res.json({ job, reviews });
+    } catch (err) {
+        console.error(err);
         res.status(500).json({ message: 'Server Error' });
     }
 });

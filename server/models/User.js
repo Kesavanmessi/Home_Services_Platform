@@ -9,6 +9,7 @@ const userSchema = new mongoose.Schema({
     walletBalance: { type: Number, default: 500 }, // Default 500 for testing
     resetPasswordToken: String,
     resetPasswordExpire: Date,
+    rating: { type: Number, default: 0 }, // Average rating from providers
     createdAt: { type: Date, default: Date.now }
 });
 

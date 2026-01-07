@@ -1,14 +1,26 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api';
 import { useNavigate, Link } from 'react-router-dom';
-import { User, Phone, Mail, LogOut, Home, Wallet } from 'lucide-react';
+import { User, Phone, Mail, LogOut, Home, Wallet, CheckCircle, Clock, XCircle, Zap } from 'lucide-react';
 
-const ClientProfile = () => {
+const ProviderProfile = () => {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
+    const [profile, setProfile] = useState(user);
+    const [loading, setLoading] = useState(false);
 
-    const [loading, setLoading] = React.useState(false);
+    useEffect(() => {
+        const fetchProfile = async () => {
+            try {
+                const res = await api.get('/provider/profile');
+                if (res.data) setProfile(res.data);
+            } catch (err) {
+                console.error(err);
+            }
+        };
+        fetchProfile();
+    }, []);
 
     const handleLogout = () => {
         logout();
@@ -43,16 +55,16 @@ const ClientProfile = () => {
                             amount: Number(amount)
                         });
                         alert('Payment Successful! Wallet Credited.');
-                        window.location.reload(); // Refresh to update balance
+                        window.location.reload();
                     } catch (verifyErr) {
                         console.error(verifyErr);
                         alert('Payment Verification Failed');
                     }
                 },
                 prefill: {
-                    name: user.name,
-                    email: user.email,
-                    contact: user.phone
+                    name: profile.name,
+                    email: profile.email,
+                    contact: profile.phone
                 },
                 theme: {
                     color: "#4f46e5"
@@ -73,42 +85,66 @@ const ClientProfile = () => {
         }
     };
 
-    if (!user) return null;
+    if (!profile) return <div className="p-10 text-center">Loading...</div>;
+
+    const getStatusIcon = (status) => {
+        switch (status) {
+            case 'verified': return <CheckCircle size={20} className="text-green-500" />;
+            case 'pending_documents':
+            case 'pending_verification': return <Clock size={20} className="text-orange-500" />;
+            default: return <XCircle size={20} className="text-red-500" />;
+        }
+    };
 
     return (
         <div className="min-h-screen bg-gray-50 pb-20">
             <div className="max-w-md mx-auto bg-white min-h-screen shadow-xl relative">
 
                 {/* Header */}
-                <div className="bg-gradient-to-r from-indigo-600 to-blue-600 text-white p-8 rounded-b-3xl text-center">
-                    <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
+                <div className="bg-gradient-to-r from-emerald-600 to-green-600 text-white p-8 rounded-b-3xl text-center">
+                    <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm relative">
                         <User size={40} className="text-white" />
+                        <div className="absolute bottom-0 right-0 bg-white rounded-full p-1">
+                            {getStatusIcon(profile.verificationStatus)}
+                        </div>
                     </div>
-                    <h1 className="text-2xl font-bold">{user.name}</h1>
-                    <p className="text-blue-100">{user.email}</p>
+                    <h1 className="text-2xl font-bold">{profile.name}</h1>
+                    <p className="text-green-100">{profile.category} Specialist</p>
                 </div>
 
                 {/* Content */}
                 <div className="p-6 space-y-6">
 
                     {/* Wallet Card */}
-                    <div className="bg-white rounded-2xl p-6 shadow-md border border-indigo-50">
+                    <div className="bg-white rounded-2xl p-6 shadow-md border border-green-50">
                         <div className="flex items-center justify-between mb-4">
                             <div>
                                 <p className="text-gray-500 text-sm mb-1">Wallet Balance</p>
-                                <h2 className="text-3xl font-bold text-gray-800">₹{user.walletBalance || 0}</h2>
+                                <h2 className="text-3xl font-bold text-gray-800">₹{profile.walletBalance || 0}</h2>
                             </div>
-                            <div className="bg-indigo-100 p-3 rounded-full text-indigo-600">
+                            <div className="bg-green-100 p-3 rounded-full text-green-600">
                                 <Wallet size={24} />
                             </div>
                         </div>
                         <div className="flex gap-3">
-                            <button onClick={handleAddMoney} disabled={loading} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold text-sm hover:bg-indigo-700 transition disabled:opacity-50">
+                            <button onClick={handleAddMoney} disabled={loading} className="flex-1 bg-green-600 text-white py-2 rounded-lg font-bold text-sm hover:bg-green-700 transition disabled:opacity-50">
                                 {loading ? 'Processing...' : '+ Add Money'}
                             </button>
-                            <Link to="/client/transactions" className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold text-sm text-center hover:bg-gray-200 transition">
+                            <Link to="/provider/transactions" className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold text-sm text-center hover:bg-gray-200 transition">
                                 History
                             </Link>
+                        </div>
+                    </div>
+
+                    {/* Stats / Trials */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-white border border-gray-100 p-4 rounded-xl shadow-sm">
+                            <p className="text-xs text-gray-500 flex items-center gap-1 mb-1"><Zap size={12} className="text-yellow-500" /> Trial Jobs</p>
+                            <p className="text-xl font-bold">{profile.trialJobsLeft} Left</p>
+                        </div>
+                        <div className="bg-white border border-gray-100 p-4 rounded-xl shadow-sm">
+                            <p className="text-xs text-gray-500 flex items-center gap-1 mb-1"><CheckCircle size={12} className="text-blue-500" /> Status</p>
+                            <p className="text-sm font-bold capitalize">{profile.verificationStatus.replace('_', ' ')}</p>
                         </div>
                     </div>
 
@@ -120,7 +156,7 @@ const ClientProfile = () => {
                             </div>
                             <div>
                                 <p className="text-xs text-gray-500">Phone</p>
-                                <p className="font-medium text-gray-800">{user.phone}</p>
+                                <p className="font-medium text-gray-800">{profile.phone}</p>
                             </div>
                         </div>
                         <div className="p-4 border-b flex items-center gap-4">
@@ -129,7 +165,7 @@ const ClientProfile = () => {
                             </div>
                             <div>
                                 <p className="text-xs text-gray-500">Email</p>
-                                <p className="font-medium text-gray-800">{user.email}</p>
+                                <p className="font-medium text-gray-800">{profile.email}</p>
                             </div>
                         </div>
                     </div>
@@ -146,11 +182,11 @@ const ClientProfile = () => {
                 {/* Bottom Navigation */}
                 <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-6 py-4 shadow-top">
                     <div className="max-w-md mx-auto flex justify-around">
-                        <Link to="/client/home" className="flex flex-col items-center gap-1 text-gray-400">
+                        <Link to="/provider/dashboard" className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition">
                             <Home size={24} />
                             <span className="text-xs font-medium">Home</span>
                         </Link>
-                        <button className="flex flex-col items-center gap-1 text-indigo-600">
+                        <button className="flex flex-col items-center gap-1 text-green-600">
                             <User size={24} />
                             <span className="text-xs font-bold">Profile</span>
                         </button>
@@ -162,4 +198,4 @@ const ClientProfile = () => {
     );
 };
 
-export default ClientProfile;
+export default ProviderProfile;

@@ -57,4 +57,7 @@ const serviceProviderSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 });
 
+// GeoJSON Index - Crucial for Scalability
+serviceProviderSchema.index({ coordinates: '2dsphere' });
+
 module.exports = mongoose.model('ServiceProvider', serviceProviderSchema);

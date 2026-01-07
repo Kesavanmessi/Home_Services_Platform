@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api';
-import { Home, Search, User, Zap, Droplet, Hammer, PaintBucket, Wind, Wrench, MapPin, XCircle } from 'lucide-react';
+import { Home, Search, User, Zap, Droplet, Hammer, PaintBucket, Wind, Wrench, MapPin, XCircle, FileText } from 'lucide-react';
 
 const ClientHome = () => {
     const { user } = useAuth();
@@ -158,6 +158,10 @@ const ClientHome = () => {
                             <Home size={24} />
                             <span className="text-xs font-medium">Home</span>
                         </button>
+                        <Link to="/terms" className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition">
+                            <FileText size={24} />
+                            <span className="text-xs">Terms</span>
+                        </Link>
                         <Link to="/client/profile" className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition">
                             <User size={24} />
                             <span className="text-xs">Profile</span>
