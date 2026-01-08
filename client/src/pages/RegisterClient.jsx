@@ -5,13 +5,16 @@ import { User, Mail, Lock, Phone } from 'lucide-react';
 
 const RegisterClient = () => {
     const [formData, setFormData] = useState({
-        name: '', email: '', password: '', phone: ''
+        name: '', email: '', password: '', phone: '', termsAccepted: false
     });
     const { registerClient } = useAuth();
     const navigate = useNavigate();
     const [error, setError] = useState('');
 
-    const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+    const handleChange = (e) => {
+        const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+        setFormData({ ...formData, [e.target.name]: value });
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -81,6 +84,20 @@ const RegisterClient = () => {
                             className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 pl-10 pr-4 outline-none focus:border-indigo-500"
                             required
                         />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="checkbox"
+                            name="termsAccepted"
+                            id="terms"
+                            onChange={handleChange}
+                            required
+                            className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                        />
+                        <label htmlFor="terms" className="text-sm text-gray-600">
+                            I agree to the <Link to="/terms" className="text-indigo-600 hover:underline">Terms and Conditions</Link>
+                        </label>
                     </div>
 
                     <button

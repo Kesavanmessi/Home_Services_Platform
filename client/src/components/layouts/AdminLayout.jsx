@@ -23,16 +23,20 @@ const AdminLayout = () => {
 
                 <nav className="flex-1 p-4 space-y-2">
                     <Link to="/admin" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-800 transition-colors text-gray-300 hover:text-white">
-                        <LayoutDashboard size={20} />
-                        <span>Dashboard</span>
+                        <Shield size={20} />
+                        <span>Verification</span>
                     </Link>
                     <Link to="/admin/providers" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-800 transition-colors text-gray-300 hover:text-white">
                         <Users size={20} />
                         <span>Providers</span>
                     </Link>
+                    <Link to="/admin/users" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-800 transition-colors text-gray-300 hover:text-white">
+                        <Users size={20} />
+                        <span>Users</span>
+                    </Link>
                     <Link to="/admin/requests" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-800 transition-colors text-gray-300 hover:text-white">
                         <FileText size={20} />
-                        <span>Requests</span>
+                        <span>Job Reports</span>
                     </Link>
                 </nav>
 

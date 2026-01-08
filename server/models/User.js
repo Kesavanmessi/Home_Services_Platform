@@ -10,6 +10,14 @@ const userSchema = new mongoose.Schema({
     resetPasswordToken: String,
     resetPasswordExpire: Date,
     rating: { type: Number, default: 0 }, // Average rating from providers
+    accountStatus: {
+        type: String,
+        enum: ['active', 'suspended', 'banned'],
+        default: 'active'
+    },
+    banReason: { type: String },
+    suspensionEndTime: { type: Date },
+    termsAccepted: { type: Boolean, default: false },
     createdAt: { type: Date, default: Date.now }
 });
 

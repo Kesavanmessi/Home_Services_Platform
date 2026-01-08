@@ -50,7 +50,7 @@ const TermsAndConditions = () => {
                                     <CheckCircle size={18} /> Fair Pricing
                                 </h3>
                                 <p className="text-gray-600 text-sm">
-                                    Adhere to the agreed-upon rates. Do not demand extra hidden charges after reaching the location.
+                                    Your service charge is decided dynamically by the platform based on your experience and rating. You must strictly adhere to the calculated charge shown for each job. Any additional demands are a violation of our terms. Be a gentleman and follow the rules.
                                 </p>
                             </div>
                             <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100">
@@ -88,10 +88,10 @@ const TermsAndConditions = () => {
                             </div>
                             <div className="bg-green-50 p-6 rounded-2xl border border-green-100">
                                 <h3 className="font-bold text-lg mb-2 flex items-center gap-2 text-green-800">
-                                    <CheckCircle size={18} /> Timely Payment
+                                    <CheckCircle size={18} /> Pricing & Payments
                                 </h3>
                                 <p className="text-gray-600 text-sm">
-                                    Release payments promptly upon successful completion of the service.
+                                    Service charges vary based on the matched provider's experience and rating. The fee shown is for service only and excludes spare parts, petrol, or platform fees. Please pay the total amount upon completion.
                                 </p>
                             </div>
                             <div className="bg-green-50 p-6 rounded-2xl border border-green-100">

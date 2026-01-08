@@ -40,7 +40,10 @@ function App() {
             </PrivateRoute>
           }>
             <Route index element={<AdminDashboard />} />
-            {/* Future Admin Routes can be nested here */}
+            <Route index element={<AdminDashboard />} />
+            <Route path="providers" element={<AdminDashboard />} />
+            <Route path="users" element={<AdminDashboard />} />
+            <Route path="requests" element={<AdminDashboard />} />
           </Route>
 
           {/* Protected Client Routes */}

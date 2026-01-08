@@ -5,6 +5,8 @@ const auth = require('../middleware/auth');
 const ServiceProvider = require('../models/ServiceProvider');
 const ServiceRequest = require('../models/ServiceRequest');
 const Review = require('../models/Review');
+const User = require('../models/User');
+const { sendDocumentVerificationNotification, sendAccountStatusNotification } = require('../services/emailService');
 
 // Admin Middleware (Simple check)
 const adminAuth = (req, res, next) => {
@@ -48,6 +50,9 @@ router.put('/providers/:id/reject-docs', auth, adminAuth, async (req, res) => {
             { verificationStatus: 'documents_rejected' },
             { new: true }
         );
+        if (provider) {
+            await sendDocumentVerificationNotification(provider.email, provider.name, 'rejected', 'Documents rejected by admin.');
+        }
         res.json(provider);
     } catch (err) {
         res.status(500).json({ message: 'Server Error' });
@@ -84,6 +89,9 @@ router.put('/providers/:id/approve', auth, adminAuth, async (req, res) => {
             },
             { new: true }
         );
+        if (provider) {
+            await sendDocumentVerificationNotification(provider.email, provider.name, 'approved');
+        }
         res.json(provider);
     } catch (err) {
         res.status(500).json({ message: 'Server Error' });
@@ -101,6 +109,9 @@ router.put('/providers/:id/fail', auth, adminAuth, async (req, res) => {
             },
             { new: true }
         );
+        if (provider) {
+            await sendDocumentVerificationNotification(provider.email, provider.name, 'rejected', 'Verification/Interview Failed.');
+        }
         res.json(provider);
     } catch (err) {
         res.status(500).json({ message: 'Server Error' });
@@ -162,13 +173,10 @@ router.get('/reviews/:providerId', auth, adminAuth, async (req, res) => {
 // Get All Jobs (Detailed Report List)
 router.get('/jobs/report', auth, adminAuth, async (req, res) => {
     try {
-        const jobs = await ServiceRequest.findOne ? ServiceRequest.find() // Need to import ServiceRequest
+        const jobs = await ServiceRequest.find()
             .populate('client', 'name email phone')
             .populate('provider', 'name email phone category')
-            .sort({ createdAt: -1 }) : [];
-
-        // Note: ServiceRequest model is not imported in admin.js yet. I must import it at the top.
-        // But for now I'll write the query here and fix imports in next step or use require.
+            .sort({ createdAt: -1 });
 
         res.json(jobs);
     } catch (err) {
@@ -193,6 +201,78 @@ router.get('/jobs/:id/details', auth, adminAuth, async (req, res) => {
             .populate('provider', 'name');
 
         res.json({ job, reviews });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
+// --- USER MANAGEMENT & BAN SYSTEM ---
+
+// Get All Users (Clients)
+router.get('/users/all', auth, adminAuth, async (req, res) => {
+    try {
+        const users = await User.find({ role: 'client' }).select('-password').sort({ createdAt: -1 });
+        res.json(users);
+    } catch (err) {
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
+// Update User Status (Suspend/Ban)
+// Update User Status (Suspend/Ban)
+router.put('/users/:id/status', auth, adminAuth, async (req, res) => {
+    try {
+        const { status, reason, suspensionDuration } = req.body; // suspensionDuration in days
+        let updateData = { accountStatus: status, banReason: reason };
+
+        if (status === 'suspended' && suspensionDuration) {
+            updateData.suspensionEndTime = new Date(Date.now() + suspensionDuration * 24 * 60 * 60 * 1000);
+        } else if (status === 'active' || status === 'banned') {
+            updateData.suspensionEndTime = null;
+        }
+
+        const user = await User.findByIdAndUpdate(
+            req.params.id,
+            updateData,
+            { new: true }
+        ).select('-password');
+
+        if (user) {
+            await sendAccountStatusNotification(user.email, user.name, status, reason, suspensionDuration);
+        }
+
+        res.json(user);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
+// Update Provider Status (Suspend/Ban)
+// Update Provider Status (Suspend/Ban)
+router.put('/providers/:id/status', auth, adminAuth, async (req, res) => {
+    try {
+        const { status, reason, suspensionDuration } = req.body;
+        let updateData = { accountStatus: status, banReason: reason };
+
+        if (status === 'suspended' && suspensionDuration) {
+            updateData.suspensionEndTime = new Date(Date.now() + suspensionDuration * 24 * 60 * 60 * 1000);
+        } else if (status === 'active' || status === 'banned') {
+            updateData.suspensionEndTime = null;
+        }
+
+        const provider = await ServiceProvider.findByIdAndUpdate(
+            req.params.id,
+            updateData,
+            { new: true }
+        ).select('-password');
+
+        if (provider) {
+            await sendAccountStatusNotification(provider.email, provider.name, status, reason, suspensionDuration);
+        }
+
+        res.json(provider);
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Server Error' });

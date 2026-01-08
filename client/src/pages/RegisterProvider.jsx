@@ -6,7 +6,7 @@ import { User, Mail, Lock, Phone, MapPin, Briefcase } from 'lucide-react';
 const RegisterProvider = () => {
     const [formData, setFormData] = useState({
         name: '', email: '', password: '', phone: '',
-        category: 'Electrician', location: '', experience: ''
+        category: 'Electrician', location: '', experience: '', termsAccepted: false
     });
     const { registerProvider } = useAuth();
     const navigate = useNavigate();
@@ -14,7 +14,10 @@ const RegisterProvider = () => {
 
     const serviceCategories = ['Electrician', 'Plumber', 'Carpenter', 'Painter', 'AC Repair', 'Other'];
 
-    const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+    const handleChange = (e) => {
+        const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+        setFormData({ ...formData, [e.target.name]: value });
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -122,6 +125,20 @@ const RegisterProvider = () => {
                             className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 pl-10 pr-4 outline-none focus:border-green-500"
                             required
                         />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="checkbox"
+                            name="termsAccepted"
+                            id="terms"
+                            onChange={handleChange}
+                            required
+                            className="w-4 h-4 text-green-600 rounded border-gray-300 focus:ring-green-500"
+                        />
+                        <label htmlFor="terms" className="text-sm text-gray-600">
+                            I agree to the <Link to="/terms" className="text-green-600 hover:underline">Terms and Conditions</Link>
+                        </label>
                     </div>
 
                     <button

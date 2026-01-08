@@ -322,6 +322,12 @@ const CreateRequest = () => {
                                         <p className="text-2xl font-bold text-blue-600">{stats.total}</p>
                                         <p className="text-gray-600 text-xs">Total Nearby</p>
                                     </div>
+                                    <div className="col-span-2 bg-gradient-to-r from-indigo-500 to-purple-500 p-3 rounded-lg text-center text-white shadow-md">
+                                        <p className="text-xl font-bold">
+                                            ₹{stats.minPrice} - ₹{stats.maxPrice}
+                                        </p>
+                                        <p className="text-indigo-100 text-xs">Estimated Service Charge</p>
+                                    </div>
                                 </div>
                                 {stats.offline > 0 && stats.availableNow === 0 && (
                                     <p className="text-xs text-gray-500 mt-3 text-center italic">

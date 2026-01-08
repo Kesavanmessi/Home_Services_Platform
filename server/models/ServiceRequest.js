@@ -17,6 +17,8 @@ const serviceRequestSchema = new mongoose.Schema({
     cancellationReason: { type: String },
     cancelledBy: { type: String, enum: ['client', 'provider', 'admin'] },
     expense: { type: Number, default: 0 }, // Part costs
+    serviceCharge: { type: Number }, // Dynamic Base Charge
+    platformFee: { type: Number },   // Fixed Platform Fee
     startOtp: String,
     endOtp: String,
     startTime: Date,

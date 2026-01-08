@@ -186,6 +186,29 @@ const RequestDetails = () => {
 
                                     {request.status === 'accepted' && (
                                         <div className="mt-4">
+                                            {/* Bill Breakdown */}
+                                            {request.serviceCharge && (
+                                                <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 mb-3 text-sm">
+                                                    <h4 className="font-bold text-gray-700 mb-2">Estimated Bill</h4>
+                                                    <div className="flex justify-between text-gray-600 mb-1">
+                                                        <span>Service Charge</span>
+                                                        <span>₹{request.serviceCharge}</span>
+                                                    </div>
+                                                    <div className="flex justify-between text-gray-600 mb-1">
+                                                        <span>Platform Fee</span>
+                                                        <span>₹{request.platformFee || 50}</span>
+                                                    </div>
+                                                    <div className="border-t border-gray-300 my-2"></div>
+                                                    <div className="flex justify-between font-bold text-gray-800">
+                                                        <span>Total Service Cost</span>
+                                                        <span>₹{(request.serviceCharge || 0) + (request.platformFee || 50)}</span>
+                                                    </div>
+                                                    <p className="text-[10px] text-gray-500 mt-2 leading-tight">
+                                                        *Does not include spare parts, petrol, or other material costs.
+                                                    </p>
+                                                </div>
+                                            )}
+
                                             <div className="flex items-start gap-2 mb-3 bg-blue-50 p-3 rounded-lg border border-blue-100">
                                                 <input
                                                     type="checkbox"
@@ -194,7 +217,7 @@ const RequestDetails = () => {
                                                     onChange={(e) => setDisclaimerAccepted(e.target.checked)}
                                                 />
                                                 <label htmlFor="disclaimer" className="text-xs text-blue-800 leading-tight">
-                                                    I understand that this platform only connects me with the provider. Service quality, safety, and payments are handled entirely offline between me and the provider.
+                                                    I agree that the service charge varies based on the matched provider. This fee excludes products/parts, petrol, or material costs. The final cost may vary based on actual work required. I accept the platform terms.
                                                 </label>
                                             </div>
                                             <button

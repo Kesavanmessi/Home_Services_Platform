@@ -33,7 +33,7 @@ const serviceProviderSchema = new mongoose.Schema({
         time: String  // "HH:mm"
     }],
     interviewDate: { type: Date },
-    trialJobsLeft: { type: Number, default: 0 },
+    trialJobsLeft: { type: Number, default: 5 }, // Sync with PRICING_CONFIG manually or require if safe
 
     // New Fields for Filter
     workingHours: {
@@ -54,6 +54,14 @@ const serviceProviderSchema = new mongoose.Schema({
     jobsCompleted: { type: Number, default: 0 },
     walletBalance: { type: Number, default: 500 }, // Default 500 for testing
     role: { type: String, default: 'provider' },
+    accountStatus: {
+        type: String,
+        enum: ['active', 'suspended', 'banned'],
+        default: 'active'
+    },
+    banReason: { type: String },
+    suspensionEndTime: { type: Date },
+    termsAccepted: { type: Boolean, default: false },
     createdAt: { type: Date, default: Date.now }
 });
 

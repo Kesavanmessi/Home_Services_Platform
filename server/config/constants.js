@@ -21,5 +21,19 @@ module.exports = {
         ADMIN: 'admin',
         PROVIDER: 'provider',
         CLIENT: 'client'
+    },
+    SERVICE_RATES: {
+        'Electrician': 300,
+        'Plumber': 250,
+        'Carpenter': 350,
+        'Painter': 400,
+        'AC Repair': 500,
+        'Other': 200
+    },
+    PRICING_CONFIG: {
+        TRIAL_JOBS_COUNT: 5,
+        PLATFORM_FEE: 50,
+        RATING_MULTIPLIER: 0.1, // 10% per star above 3
+        EXPERIENCE_MULTIPLIER: 0.05 // 5% per year
     }
 };

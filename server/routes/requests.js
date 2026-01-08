@@ -6,7 +6,15 @@ const ServiceProvider = require('../models/ServiceProvider');
 const Transaction = require('../models/Transaction');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
-const { sendServiceOtp, sendNotificationEmail } = require('../services/emailService');
+const {
+    sendServiceOtp,
+    sendNotificationEmail,
+    sendJobAcceptedNotification,
+    sendJobCancelledNotification,
+    sendJobCompletedNotification
+} = require('../services/emailService');
+const { calculateProviderCharge } = require('../utils/pricing');
+const { PRICING_CONFIG } = require('../config/constants');
 const crypto = require('crypto');
 
 // Helper: Check and Expire Timeout
@@ -88,9 +96,13 @@ router.get('/provider-stats', auth, async (req, res) => {
                 }
             },
             {
-                // Project only what we need to minimize memory
+                // Project fields needed for Pricing & Availability
                 $project: {
                     isAvailable: 1,
+                    rating: 1,
+                    experience: 1,
+                    trialJobsLeft: 1,
+                    category: 1,
                     _id: 1
                 }
             },
@@ -101,20 +113,17 @@ router.get('/provider-stats', auth, async (req, res) => {
                     total: { $sum: 1 },
                     offline: { $sum: { $cond: [{ $eq: ["$isAvailable", false] }, 1, 0] } },
                     online: { $sum: { $cond: [{ $eq: ["$isAvailable", true] }, 1, 0] } },
-                    providers: { $push: { _id: "$_id", isAvailable: "$isAvailable" } } // Keep minimal list for next join
+                    providers: { $push: "$$ROOT" } // Push full object to calc prices
                 }
             }
         ]);
 
         if (stats.length === 0) {
-            return res.json({ total: 0, availableNow: 0, busy: 0, offline: 0 });
+            return res.json({ total: 0, availableNow: 0, busy: 0, offline: 0, minPrice: 0, maxPrice: 0 });
         }
 
         const result = stats[0];
         // Now check "Busy" status for online providers
-        // We still need to check active jobs, but only for the N relevant providers, not all.
-        // Optimization: $lookup could work but might be slow if requests are huge.
-        // Let's iterate the filtered list (much smaller).
 
         let busyCount = 0;
         const onlineProviders = result.providers.filter(p => p.isAvailable);
@@ -128,11 +137,30 @@ router.get('/provider-stats', auth, async (req, res) => {
             busyCount = busyProviders;
         }
 
+        // Calculate Pricing Range for ONLINE providers
+        // If no online providers, show range for ALL providers in area (to give idea)
+        const pricingPool = onlineProviders.length > 0 ? onlineProviders : result.providers;
+
+        let minPrice = Infinity;
+        let maxPrice = 0;
+
+        if (pricingPool.length > 0) {
+            pricingPool.forEach(p => {
+                const price = calculateProviderCharge(p);
+                if (price < minPrice) minPrice = price;
+                if (price > maxPrice) maxPrice = price;
+            });
+        } else {
+            minPrice = 0;
+        }
+
         res.json({
             total: result.total,
             offline: result.offline,
             busy: busyCount,
-            availableNow: result.online - busyCount
+            availableNow: result.online - busyCount,
+            minPrice: minPrice === Infinity ? 0 : minPrice,
+            maxPrice: maxPrice
         });
 
     } catch (err) {
@@ -437,6 +465,10 @@ router.put('/:id/accept', auth, async (req, res) => {
         const provider = await ServiceProvider.findById(providerId);
         if (!provider.isAvailable) return res.status(400).json({ message: 'You are marked unavailable' });
 
+        // Calculate Charge BEFORE locking (safe enough, as these params rarely change mid-request)
+        const computedServiceCharge = calculateProviderCharge(provider);
+        const platformFee = PRICING_CONFIG.PLATFORM_FEE;
+
         // Check active job (still slightly racy but better than before, hard to atomic lock across collections without transactions)
         // Ideally we put 'activeJobId' on Provider to lock it. For MVP refactor, we stick to request query but assume low collision per provider.
         const activeJob = await ServiceRequest.findOne({
@@ -452,7 +484,7 @@ router.put('/:id/accept', auth, async (req, res) => {
 
         if (currentCount >= LIMITS.DAILY_ACCEPTANCE) return res.status(400).json({ message: 'Daily limit reached' });
 
-        // Step B: Atomic Wallet Deduction
+        // Step B: Atomic Wallet Deduction & Trial Decrement
         // "I will pay 30 IF I have >= 30"
         const updatedProvider = await ServiceProvider.findOneAndUpdate(
             {
@@ -460,7 +492,10 @@ router.put('/:id/accept', auth, async (req, res) => {
                 walletBalance: { $gte: FEES.ACCEPTANCE }
             },
             {
-                $inc: { walletBalance: -FEES.ACCEPTANCE },
+                $inc: {
+                    walletBalance: -FEES.ACCEPTANCE,
+                    trialJobsLeft: provider.trialJobsLeft > 0 ? -1 : 0 // Decrement trial if active
+                },
                 $set: {
                     lastAcceptanceDate: Date.now(),
                     dailyAcceptanceCount: currentCount + 1 // Increment calculated count
@@ -482,7 +517,9 @@ router.put('/:id/accept', auth, async (req, res) => {
                     status: 'accepted',
                     provider: providerId,
                     acceptanceFeePaid: true,
-                    acceptedAt: Date.now()
+                    acceptedAt: Date.now(),
+                    serviceCharge: computedServiceCharge, // Lock in the price
+                    platformFee: platformFee
                 }
             },
             { new: true }
@@ -491,7 +528,10 @@ router.put('/:id/accept', auth, async (req, res) => {
         if (!job) {
             // JOB WAS STOLEN (Race Condition Hit) -> Refund Provider
             await ServiceProvider.findByIdAndUpdate(providerId, {
-                $inc: { walletBalance: FEES.ACCEPTANCE },
+                $inc: {
+                    walletBalance: FEES.ACCEPTANCE,
+                    trialJobsLeft: provider.trialJobsLeft > 0 ? 1 : 0 // Revert trial
+                },
                 $set: { dailyAcceptanceCount: currentCount } // Revert count
             });
             return res.status(400).json({ message: 'Request already taken by another provider' });
@@ -517,11 +557,7 @@ router.put('/:id/accept', auth, async (req, res) => {
         try {
             const clientUser = await User.findById(job.client);
             if (clientUser) {
-                sendNotificationEmail(
-                    clientUser.email,
-                    'Provider Found! Confirm Now',
-                    `Provider ${updatedProvider.name} accepted. Confirm within 15 mins.`
-                ).catch(e => console.error(e));
+                sendJobAcceptedNotification(clientUser.email, clientUser.name, updatedProvider.name).catch(e => console.error(e));
             }
         } catch (e) { console.error(e); }
 
@@ -675,6 +711,17 @@ router.put('/:id/cancel', auth, async (req, res) => {
         request.cancelledBy = req.user.role;
         await request.save();
 
+        // Send Cancellation Email
+        try {
+            if (isClient && request.provider) {
+                const provider = await ServiceProvider.findById(request.provider);
+                if (provider) sendJobCancelledNotification(provider.email, provider.name, 'Client', reason);
+            } else if (isProvider) {
+                const client = await User.findById(request.client);
+                if (client) sendJobCancelledNotification(client.email, client.name, 'Provider', reason);
+            }
+        } catch (e) { console.error("Email Error:", e); }
+
         res.json({ message: 'Request cancelled with applicable penalties/refunds.' });
 
     } catch (err) {
@@ -767,6 +814,16 @@ router.put('/:id/verify_end', auth, async (req, res) => {
         // Ah, confirm incremented jobsCompleted in previous sessions. 
         // That might be premature. Usually jobsCompleted increments on completion.
         // Let's fix that later if needed. For now, just mark status.
+
+        // Send Completion Email
+        try {
+            const client = await User.findById(request.client);
+            const provider = await ServiceProvider.findById(request.provider);
+            if (client && provider) {
+                const totalAmount = (request.expense || 0) + 100; // Mock total or implement dynamic
+                sendJobCompletedNotification(client.email, client.name, provider.name, totalAmount).catch(e => console.error(e));
+            }
+        } catch (e) { console.error("Email Error:", e); }
 
         res.json({ message: 'Service Completed', request });
     } catch (err) {
