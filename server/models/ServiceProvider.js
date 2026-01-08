@@ -42,8 +42,8 @@ const serviceProviderSchema = new mongoose.Schema({
     },
     serviceRadius: { type: Number, default: 20, min: 5, max: 30 },
     coordinates: {
-        lat: { type: Number },
-        lng: { type: Number }
+        type: { type: String, enum: ['Point'], default: 'Point' },
+        coordinates: { type: [Number] } // [lng, lat]
     },
 
     isAvailable: { type: Boolean, default: true },

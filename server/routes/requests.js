@@ -169,67 +169,8 @@ router.get('/provider-stats', auth, async (req, res) => {
     }
 });
 
-// Get Provider Stats (Public/Client - Pre-Request Report)
-router.get('/provider-stats', auth, async (req, res) => {
-    try {
-        const { category, lat, lng } = req.query;
-        if (!category || !lat || !lng) return res.status(400).json({ message: 'Missing parameters' });
+// Duplicate provider-stats route removed.
 
-        const uLat = parseFloat(lat);
-        const uLng = parseFloat(lng);
-        const R = 6371; // Earth Radius in km
-
-        const allProviders = await ServiceProvider.find({ category, isVerified: true });
-
-        let stats = {
-            total: 0,
-            availableNow: 0,
-            busy: 0,
-            offline: 0
-        };
-
-        for (const provider of allProviders) {
-            if (!provider.coordinates || !provider.coordinates.lat) continue;
-
-            const pLat = provider.coordinates.lat * Math.PI / 180;
-            const pLng = provider.coordinates.lng * Math.PI / 180;
-            const rLat = uLat * Math.PI / 180;
-            const rLng = uLng * Math.PI / 180;
-
-            const dUtils = Math.acos(Math.sin(pLat) * Math.sin(rLat) + Math.cos(pLat) * Math.cos(rLat) * Math.cos(pLng - rLng));
-            // Simplified Spherical Law of Cosines or Haversine can be used. using Haversine below for consistency:
-
-            const dLat = rLat - pLat;
-            const dLng = rLng - pLng;
-            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                Math.cos(pLat) * Math.cos(rLat) *
-                Math.sin(dLng / 2) * Math.sin(dLng / 2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            const d = R * c;
-
-            if (d <= (provider.serviceRadius || 20)) {
-                stats.total++;
-                if (!provider.isAvailable) {
-                    stats.offline++;
-                } else {
-                    const activeJob = await ServiceRequest.findOne({
-                        provider: provider._id,
-                        status: { $in: ['accepted', 'confirmed', 'in_progress'] }
-                    });
-                    if (activeJob) {
-                        stats.busy++;
-                    } else {
-                        stats.availableNow++;
-                    }
-                }
-            }
-        }
-        res.json(stats);
-    } catch (err) {
-        console.error("Provider Stats Error:", err);
-        res.status(500).json({ message: 'Server Error' });
-    }
-});
 
 // Get Active Job for Provider
 router.get('/active-job', auth, async (req, res) => {
@@ -255,12 +196,18 @@ router.post('/', auth, async (req, res) => {
     try {
         const { category, problemDescription, location, coordinates, scheduledDate } = req.body; // Added coordinates and scheduledDate
 
+        // Convert { lat, lng } to GeoJSON
+        const geoJsonCoordinates = (coordinates && coordinates.lat && coordinates.lng) ? {
+            type: 'Point',
+            coordinates: [coordinates.lng, coordinates.lat]
+        } : undefined;
+
         const newRequest = new ServiceRequest({
             client: req.user.id,
             category,
             problemDescription,
             location,
-            coordinates,
+            coordinates: geoJsonCoordinates,
             scheduledDate,
             status: 'open'
         });
@@ -285,10 +232,11 @@ router.get('/nearby', auth, async (req, res) => {
 
         if (!provider.isVerified) return res.status(403).json({ message: 'Provider not verified' });
         if (!provider.isAvailable) return res.status(200).json([]); // Return empty if unavailable
-        if (!provider.coordinates || !provider.coordinates.lat) return res.status(200).json([]); // No location set
+        if (!provider.coordinates || !provider.coordinates.coordinates) return res.status(200).json([]); // No location set
 
-        const pLat = provider.coordinates.lat;
-        const pLng = provider.coordinates.lng;
+        // GeoJSON: [lng, lat]
+        const pLng = provider.coordinates.coordinates[0];
+        const pLat = provider.coordinates.coordinates[1];
         const radiusKm = maxDistance ? parseInt(maxDistance) : (provider.serviceRadius || 20);
         const radiusMeters = radiusKm * 1000;
 
@@ -333,12 +281,14 @@ router.get('/nearby', auth, async (req, res) => {
             // We can manually calc distance if we want to show it in UI, or trust filter.
             // Let's add approximate distance for UI since $near doesn't return it without aggregation
             // But for list view, close enough.
-            if (r.coordinates && r.coordinates.lat) {
-                // Fast Haversine for UI display only (on small result set)
+            if (r.coordinates && r.coordinates.coordinates) {
+                // Fast Haversine for UI display only
+                const rLat = r.coordinates.coordinates[1]; // lat is index 1
+                const rLng = r.coordinates.coordinates[0]; // lng is index 0
                 const R = 6371;
-                const dLat = (r.coordinates.lat - pLat) * Math.PI / 180;
-                const dLng = (r.coordinates.lng - pLng) * Math.PI / 180;
-                const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(pLat * Math.PI / 180) * Math.cos(r.coordinates.lat * Math.PI / 180) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+                const dLat = (rLat - pLat) * Math.PI / 180;
+                const dLng = (rLng - pLng) * Math.PI / 180;
+                const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(pLat * Math.PI / 180) * Math.cos(rLat * Math.PI / 180) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
                 const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
                 rObj.distance = R * c;
             }

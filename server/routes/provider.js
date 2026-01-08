@@ -59,9 +59,19 @@ router.get('/profile', auth, async (req, res) => {
 router.put('/settings', auth, async (req, res) => {
     try {
         const { workingHours, serviceRadius, coordinates } = req.body;
+
+        // Convert to GeoJSON if coordinates provided
+        const updateData = { workingHours, serviceRadius };
+        if (coordinates && coordinates.lat && coordinates.lng) {
+            updateData.coordinates = {
+                type: 'Point',
+                coordinates: [coordinates.lng, coordinates.lat]
+            };
+        }
+
         const provider = await ServiceProvider.findByIdAndUpdate(
             req.user.id,
-            { workingHours, serviceRadius, coordinates },
+            updateData,
             { new: true }
         );
         res.json(provider);
@@ -113,10 +123,10 @@ router.get('/stats', auth, async (req, res) => {
         // 2. Filter by Location & Calculate Stats
         for (const provider of allProviders) {
             // Distance Check
-            if (!provider.coordinates || !provider.coordinates.lat) continue;
+            if (!provider.coordinates || !provider.coordinates.coordinates) continue;
 
-            const pLat = provider.coordinates.lat * Math.PI / 180;
-            const pLng = provider.coordinates.lng * Math.PI / 180;
+            const pLng = provider.coordinates.coordinates[0];
+            const pLat = provider.coordinates.coordinates[1];
             const rLat = uLat * Math.PI / 180;
             const rLng = uLng * Math.PI / 180;
 

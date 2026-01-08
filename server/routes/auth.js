@@ -36,8 +36,18 @@ router.post('/register-provider', async (req, res) => {
         if (provider) return res.status(400).json({ message: 'Provider already exists' });
 
         const hashedPassword = await bcrypt.hash(password, 10);
+        // Convert coordinates to GeoJSON if provided
+        let geoJsonCoordinates;
+        if (req.body.coordinates && req.body.coordinates.lat && req.body.coordinates.lng) {
+            geoJsonCoordinates = {
+                type: 'Point',
+                coordinates: [req.body.coordinates.lng, req.body.coordinates.lat]
+            };
+        }
+
         provider = new ServiceProvider({
-            name, email, password: hashedPassword, phone, category, location, experience
+            name, email, password: hashedPassword, phone, category, location, experience,
+            coordinates: geoJsonCoordinates
         });
         // Providers need admin approval, but for simplicity we might auto-approve or mock it.
         // Prompt says "Admin reviews and approves". So isVerified default is false.

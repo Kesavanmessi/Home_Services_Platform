@@ -7,8 +7,8 @@ const serviceRequestSchema = new mongoose.Schema({
     problemDescription: { type: String, required: true },
     location: { type: String, required: true },
     coordinates: {
-        lat: { type: Number },
-        lng: { type: Number }
+        type: { type: String, enum: ['Point'], default: 'Point' },
+        coordinates: { type: [Number] } // [lng, lat]
     },
     scheduledDate: { type: Date, required: true }, // When the service is needed
     status: { type: String, enum: ['open', 'accepted', 'confirmed', 'in_progress', 'completed', 'cancelled', 'expired'], default: 'open' },
